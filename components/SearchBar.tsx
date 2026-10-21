@@ -18,7 +18,7 @@ export default function SearchBar({ value, onChange, onSubmit, loading }: Props)
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSubmit();
           }}
-          placeholder="e.g. Zijing Trading, Ningbo Ocean Plastics…"
+          placeholder="e.g. Oracle or 91330200123456789X or 拼多多"
           className="flex-1 bg-transparent px-4 py-4 text-[15px] text-foreground outline-none placeholder:text-muted sm:px-5"
         />
         <button
@@ -29,9 +29,6 @@ export default function SearchBar({ value, onChange, onSubmit, loading }: Props)
           {loading ? 'Searching…' : 'Search'}
         </button>
       </div>
-      <p className="mt-2.5 text-xs text-muted">
-        Try &quot;zijing&quot; — 3 free lookups a day, no account needed.
-      </p>
     </div>
   );
 }

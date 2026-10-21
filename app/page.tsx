@@ -5,7 +5,7 @@ import SearchBar from '@/components/SearchBar';
 import CompanyList from '@/components/CompanyList';
 import UnlockModal from '@/components/UnlockModal';
 import Toast from '@/components/Toast';
-import PricingSection from '@/components/PricingSection'; // 👈 新增引入
+// 移除了 PricingSection 的引入
 import type { SearchResponse } from '@/lib/types';
 import Link from 'next/link';
 
@@ -110,8 +110,12 @@ export default function Home() {
               Verify the company before you wire the deposit.
             </div>
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted">
-            <Link href="/blog" className="text-sm text-muted hover:text-foreground">
+          <div className="flex items-center gap-5 text-sm text-muted">
+            {/* 新增 Pricing 导航链接 */}
+            <Link href="/pricing" className="hover:text-foreground">
+              Pricing
+            </Link>
+            <Link href="/blog" className="hover:text-foreground">
               Blog
             </Link>
             <a href="#" className="hover:text-foreground">
@@ -126,14 +130,35 @@ export default function Home() {
           <h1 className="max-w-lg font-serif text-[28px] font-medium leading-tight text-paper sm:text-4xl">
             Search a company name. See what&apos;s behind the chop.
           </h1>
-          <p className="mt-3.5 max-w-md text-sm text-muted sm:text-[15px]">
-            Enter a company&apos;s unified social credit code or a keyword. We check it against
-            Chinese business registries and screen for red flags, so you know who you&apos;re
-            dealing with before you commit to a supplier.
-          </p>
+          
+          <div className="mt-4 max-w-xl text-sm text-muted sm:text-[15px] leading-relaxed">
+            <p className="mb-3">
+              Verify Chinese suppliers before you wire the deposit. We cross-check publicly available Chinese business registry data to confirm:
+            </p>
+            <ul className="space-y-1.5 ml-1">
+              <li>🏢 <strong className="text-paper font-semibold">Company Identity</strong> — Check legal status, registration details, and ownership.</li>
+              <li>⚠️ <strong className="text-paper font-semibold">Risk Indicators</strong> — Screen for publicly reported legal disputes, operational abnormalities, and regulatory notices.</li>
+              <li>📊 <strong className="text-paper font-semibold">Basic Business Information</strong> — Review publicly available registration and credit information.</li>
+            </ul>
+          </div>
 
           <div className="mt-8">
             <SearchBar value={keyword} onChange={setKeyword} onSubmit={runSearch} loading={loading} />
+          </div>
+
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm text-muted sm:text-[13px]">
+            <div>
+              <p className="mb-1">
+                Search by English keyword, Chinese keyword, or Unified Social Credit Code.
+              </p>
+              <p>
+                Try a sample search like <span className="text-paper">"zijing"</span> and get <strong className="text-paper font-semibold">3 free lookups a week</strong>. No account needed.
+              </p>
+            </div>
+            {/* 引导去价格页的链接 */}
+            <Link href="/pricing" className="text-chop hover:underline whitespace-nowrap mt-2 sm:mt-0">
+              View pricing →
+            </Link>
           </div>
 
           {error && (
@@ -156,16 +181,7 @@ export default function Home() {
           />
         )}
 
-        {/* 👇 单一价格表模块 👇 */}
-        <PricingSection 
-          onBuySingle={() => {
-            if (selectedIndex === null) {
-              showToast('Please select a company first.');
-              return;
-            }
-            requestUnlock(selectedIndex);
-          }}
-        />
+        {/* 主页底部的 PricingSection 已被彻底移除 */}
 
       </div>
 
@@ -191,7 +207,6 @@ export default function Home() {
               <div className="flex flex-col gap-2.5">
                 <span className="font-semibold text-paper">Support</span>
                 <Link href="/contact" className="hover:text-foreground">Contact Us</Link>
-                {/* 记得把这里的邮箱换成你真实的邮箱！ */}
                 <a href="mailto:support@chopcheck.com" className="hover:text-foreground">Email Support</a>
               </div>
             </div>

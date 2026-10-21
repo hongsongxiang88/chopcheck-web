@@ -6,7 +6,8 @@ type Props = {
 
 export default function PricingSection({ onBuySingle }: Props) {
   return (
-    <section className="mt-20 border-t border-line pt-10 pb-10">
+    // 修改点 1：把 mt-20 改成了 mt-0，并删除了 border-t border-line pt-10
+    <section className="mt-0 pb-10">
       <div className="text-center">
         <h3 className="font-serif text-xl font-medium text-paper sm:text-[22px]">Pricing</h3>
         <p className="mt-1.5 text-sm text-muted mx-auto max-w-md">
