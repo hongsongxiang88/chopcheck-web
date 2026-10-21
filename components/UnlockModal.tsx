@@ -1,14 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import { unlockReport } from '@/lib/api';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  userId: string;
+  companyId: string;
 };
 
-export default function UnlockModal({ open, onClose, onConfirm }: Props) {
+export default function UnlockModal({ open, onClose, onConfirm, userId, companyId }: Props) {
   const [paying, setPaying] = useState(false);
 
   if (!open) return null;
@@ -16,10 +19,18 @@ export default function UnlockModal({ open, onClose, onConfirm }: Props) {
   async function handlePay() {
     setPaying(true);
     try {
-      // TODO: 这里接你的支付网关（Stripe / 支付宝 / 微信 / 阿里云）
-      // const res = await fetch('/api/create-payment', { ... });
-      // 演示：直接确认
+      // 1. TODO: 这里接你的真实支付网关（Stripe / 支付宝 / 微信）
+      // const payRes = await fetch('/api/create-payment', { ... });
+      // if (!payRes.ok) throw new Error('Payment failed');
+
+      // 2. 支付成功后，调用后端写入 Redis 解锁标记
+      await unlockReport(userId, companyId);
+      
+      // 3. 通知父组件刷新
       onConfirm();
+    } catch (error) {
+      console.error(error);
+      alert('付款解锁失败，请重试');
     } finally {
       setPaying(false);
     }

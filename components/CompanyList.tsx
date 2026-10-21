@@ -25,6 +25,7 @@ type Props = {
   onSelect: (index: number) => void;
   unlockedIndex: number | null;
   onUnlock: (index: number) => void;
+  userId: string; // 新增
 };
 
 export default function CompanyList({
@@ -35,6 +36,7 @@ export default function CompanyList({
   onSelect,
   unlockedIndex,
   onUnlock,
+  userId,
 }: Props) {
   if (companies.length === 0) {
     return (
@@ -111,6 +113,7 @@ export default function CompanyList({
                 <div className="border-b border-line bg-ink/40 px-4 pb-8 pt-2">
                   <ReportPanel
                     company={company}
+                    userId={userId} // 传入 userId
                     unlocked={unlockedIndex === i}
                     onUnlock={() => onUnlock(i)}
                   />

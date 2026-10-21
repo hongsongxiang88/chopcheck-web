@@ -1,11 +1,13 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import CompanyList from '@/components/CompanyList';
 import UnlockModal from '@/components/UnlockModal';
 import Toast from '@/components/Toast';
+import PricingSection from '@/components/PricingSection'; // 👈 新增引入
 import type { SearchResponse } from '@/lib/types';
+import Link from 'next/link';
 
 export default function Home() {
   const [keyword, setKeyword] = useState('');
@@ -13,12 +15,25 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  // 按记录索引记录解锁状态：null 表示当前没有解锁的记录
+  
   const [unlockedIndex, setUnlockedIndex] = useState<number | null>(null);
-  // 待支付的报告索引（打开支付弹窗时设置）
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
+  
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [userId, setUserId] = useState('');
+
+  useEffect(() => {
+    let uid = localStorage.getItem('chopcheck_uid');
+    if (!uid) {
+      uid = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? crypto.randomUUID() 
+        : Math.random().toString(36).substring(2) + Date.now().toString(36);
+      localStorage.setItem('chopcheck_uid', uid);
+    }
+    setUserId(uid);
+  }, []);
 
   function showToast(message: string) {
     setToast(message);
@@ -57,7 +72,6 @@ export default function Home() {
     }
   }
 
-  // 点击某条记录：切换选中；切到别的公司时重置解锁状态
   function selectCompany(index: number) {
     setSelectedIndex((prev) => (prev === index ? null : index));
     if (unlockedIndex !== index) {
@@ -65,7 +79,6 @@ export default function Home() {
     }
   }
 
-  // 点击"解锁"：打开 9.9 美元支付弹窗
   function requestUnlock(index: number) {
     if (unlockedIndex === index) {
       showToast('This report is already unlocked.');
@@ -74,7 +87,6 @@ export default function Home() {
     setPendingIndex(index);
   }
 
-  // 用户在支付弹窗完成支付后回调
   function confirmUnlock() {
     if (pendingIndex === null) return;
     setUnlockedIndex(pendingIndex);
@@ -82,8 +94,12 @@ export default function Home() {
     showToast('Charged $9.9 — report unlocked.');
   }
 
+  const pendingCompanyId = pendingIndex !== null && result?.companies[pendingIndex] 
+    ? result.companies[pendingIndex].credit_code 
+    : '';
+
   return (
-    <main>
+    <main className="flex min-h-screen flex-col">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-3xl items-baseline justify-between px-6 py-5 sm:px-7">
           <div>
@@ -95,6 +111,9 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-4 text-sm text-muted">
+            <Link href="/blog" className="text-sm text-muted hover:text-foreground">
+              Blog
+            </Link>
             <a href="#" className="hover:text-foreground">
               Sign in
             </a>
@@ -102,7 +121,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-6 sm:px-7">
+      <div className="mx-auto w-full max-w-3xl flex-1 px-6 sm:px-7">
         <section className="pb-8 pt-12 sm:pt-16">
           <h1 className="max-w-lg font-serif text-[28px] font-medium leading-tight text-paper sm:text-4xl">
             Search a company name. See what&apos;s behind the chop.
@@ -124,7 +143,6 @@ export default function Home() {
           )}
         </section>
 
-        {/* 结果列表：点击某条记录会在其下方内联展开报告 */}
         {result && (
           <CompanyList
             companies={result.companies}
@@ -134,14 +152,57 @@ export default function Home() {
             onSelect={selectCompany}
             unlockedIndex={unlockedIndex}
             onUnlock={requestUnlock}
+            userId={userId}
           />
         )}
+
+        {/* 👇 单一价格表模块 👇 */}
+        <PricingSection 
+          onBuySingle={() => {
+            if (selectedIndex === null) {
+              showToast('Please select a company first.');
+              return;
+            }
+            requestUnlock(selectedIndex);
+          }}
+        />
+
       </div>
 
-      <footer className="border-t border-line py-8 text-xs text-muted">
+      <footer className="mt-20 border-t border-line bg-ink py-10 text-xs text-muted">
         <div className="mx-auto max-w-3xl px-6 sm:px-7">
-          Search results are live from your registry lookup. Deep-report fields are placeholders
-          pending the DueDiligence integration.
+          <div className="flex flex-col justify-between gap-8 sm:flex-row">
+            <div>
+              <div className="font-serif text-lg font-semibold text-paper">
+                Chop<span className="text-chop">Check</span>
+              </div>
+              <p className="mt-2 max-w-xs leading-relaxed">
+                Professional cross-border due diligence. Verify Chinese companies before you wire the deposit.
+              </p>
+            </div>
+            
+            <div className="flex gap-12">
+              <div className="flex flex-col gap-2.5">
+                <span className="font-semibold text-paper">Legal</span>
+                <Link href="/privacy" className="hover:text-foreground">Privacy Policy</Link>
+                <Link href="/terms" className="hover:text-foreground">Terms of Service</Link>
+                <Link href="/refund" className="hover:text-foreground">Refund Policy</Link>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <span className="font-semibold text-paper">Support</span>
+                <Link href="/contact" className="hover:text-foreground">Contact Us</Link>
+                {/* 记得把这里的邮箱换成你真实的邮箱！ */}
+                <a href="mailto:support@chopcheck.com" className="hover:text-foreground">Email Support</a>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-line pt-6 text-[11px] sm:flex-row">
+            <p>© {new Date().getFullYear()} ChopCheck. All rights reserved.</p>
+            <p>
+              Payments processed securely by <a href="https://paddle.com" target="_blank" rel="noreferrer" className="underline hover:text-foreground">Paddle.com</a>.
+            </p>
+          </div>
         </div>
       </footer>
 
@@ -149,7 +210,10 @@ export default function Home() {
         open={pendingIndex !== null}
         onClose={() => setPendingIndex(null)}
         onConfirm={confirmUnlock}
+        userId={userId}
+        companyId={pendingCompanyId}
       />
+      
       <Toast message={toast} />
     </main>
   );
