@@ -2,6 +2,7 @@
 
 import type { Company } from '@/lib/types';
 import ReportPanel from './ReportPanel';
+import { useState, useEffect } from 'react';
 
 function statusStyle(status: string) {
   const s = status.toLowerCase();
@@ -25,7 +26,7 @@ type Props = {
   onSelect: (index: number) => void;
   unlockedIndex: number | null;
   onUnlock: (index: number) => void;
-  userId: string; // 新增
+  userId: string;
 };
 
 export default function CompanyList({
@@ -38,6 +39,23 @@ export default function CompanyList({
   onUnlock,
   userId,
 }: Props) {
+  // 🔥 新增：用于控制单个企业报告展开时的加载状态
+  const [loadingReportIndex, setLoadingReportIndex] = useState<number | null>(null);
+
+  // 🔥 新增：当点击切换企业时，触发报告加载动画
+  useEffect(() => {
+    if (selectedIndex !== null) {
+      setLoadingReportIndex(selectedIndex);
+      // 模拟 500ms 的渲染/数据准备时间，然后消失
+      const timer = setTimeout(() => {
+        setLoadingReportIndex(null);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setLoadingReportIndex(null);
+    }
+  }, [selectedIndex]);
+
   if (companies.length === 0) {
     return (
       <section className="mt-9 border-t border-line pt-6 text-sm text-muted">
@@ -50,7 +68,11 @@ export default function CompanyList({
   return (
     <section className="mt-9">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2.5 text-[11px] uppercase tracking-wide text-muted">
-        <span>{companies.length} companies matched</span>
+        <span className="flex items-center gap-2">
+          {companies.length} companies matched
+          {/* 🔥 这里加了一个全局的小 loading，如果你在 page.tsx 里有 loading 状态可以传进来 */}
+          <span className="hidden sm:inline-block h-3 w-3 animate-spin rounded-full border border-line border-t-chop"></span>
+        </span>
         <span className="normal-case text-muted">
           &quot;{originalKeyword}&quot; → <span className="text-foreground">{translatedKeyword}</span>
         </span>
@@ -59,14 +81,17 @@ export default function CompanyList({
       <div role="list">
         {companies.map((company, i) => {
           const selected = selectedIndex === i;
+          // 使用信用代码作为唯一标识锚点，防止列表刷新导致位置错乱
+          const rowId = `company-row-${company.credit_code || i}`;
+          
           return (
             <div
-              id={`company-row-${i}`}
+              id={rowId} // 绑定唯一ID
               key={`${company.credit_code}-${i}`}
               role="listitem"
-              className="scroll-mt-6"
+              className="scroll-mt-10" // 留出顶部间距，防止滚动后被顶部导航栏遮挡
             >
-              {/* 记录行（点击展开/收起） */}
+              {/* 记录行 */}
               <div
                 onClick={() => onSelect(i)}
                 aria-expanded={selected}
@@ -74,12 +99,10 @@ export default function CompanyList({
                   selected ? 'bg-chop/[0.08]' : ''
                 }`}
               >
-                {/* 1. 英文公司名 */}
                 <div className="text-[15px] font-medium leading-snug text-foreground">
                   {company.name_en || '-'}
                 </div>
 
-                {/* 英文法人名 / 状态 / 创建日 / credit_code */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                   <span className="text-muted">
                     Legal Person (EN):{' '}
@@ -101,22 +124,34 @@ export default function CompanyList({
                   </span>
                 </div>
 
-                {/* 中文公司名 / 中文法人名 */}
                 <div className="flex flex-wrap items-center gap-x-4 text-xs text-muted/80">
                   <span>中文名称: {company.name || '-'}</span>
                   <span>法人: {company.legal_person || '-'}</span>
                 </div>
               </div>
 
-              {/* 选中时，在该记录下方内联展开报告 */}
+              {/* 选中时，展开报告 */}
               {selected && (
-                <div className="border-b border-line bg-ink/40 px-4 pb-8 pt-2">
-                  <ReportPanel
-                    company={company}
-                    userId={userId} // 传入 userId
-                    unlocked={unlockedIndex === i}
-                    onUnlock={() => onUnlock(i)}
-                  />
+                <div className="border-b border-line bg-ink/40 px-4 pb-8 pt-2 relative min-h-[120px]">
+                  
+                  {/* 🔥 核心修改：报告加载中的等待提示 */}
+                  {loadingReportIndex === i ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-chop"></div>
+                      <p className="mt-4 text-xs text-muted animate-pulse">
+                        Analyzing company data & generating report...
+                      </p>
+                    </div>
+                  ) : (
+                    /* 加载完成后，才显示真正的报告组件 */
+                    <ReportPanel
+                      company={company}
+                      userId={userId}
+                      unlocked={unlockedIndex === i}
+                      onUnlock={() => onUnlock(i)}
+                    />
+                  )}
+                  
                 </div>
               )}
             </div>

@@ -5,7 +5,6 @@ import SearchBar from '@/components/SearchBar';
 import CompanyList from '@/components/CompanyList';
 import UnlockModal from '@/components/UnlockModal';
 import Toast from '@/components/Toast';
-// 移除了 PricingSection 的引入
 import type { SearchResponse } from '@/lib/types';
 import Link from 'next/link';
 
@@ -87,11 +86,27 @@ export default function Home() {
     setPendingIndex(index);
   }
 
+  // 🔥 核心修改：修复弹窗消失导致的滚动跳跃
   function confirmUnlock() {
     if (pendingIndex === null) return;
+    
+    // 1. 记录刚刚解锁的是哪一家公司
+    const unlockedCompany = result?.companies[pendingIndex];
+    
+    // 2. 状态更新
     setUnlockedIndex(pendingIndex);
     setPendingIndex(null);
     showToast('Charged $9.9 — report unlocked.');
+
+    // 3. 延迟 100ms 等弹窗彻底销毁，然后强制把页面拉回该企业的位置
+    setTimeout(() => {
+      if (unlockedCompany) {
+        const el = document.getElementById(`company-row-${unlockedCompany.credit_code}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }, 100);
   }
 
   const pendingCompanyId = pendingIndex !== null && result?.companies[pendingIndex] 
@@ -111,7 +126,6 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted">
-            {/* 新增 Pricing 导航链接 */}
             <Link href="/pricing" className="hover:text-foreground">
               Pricing
             </Link>
@@ -155,7 +169,6 @@ export default function Home() {
                 Try a sample search like <span className="text-paper">"zijing"</span> and get <strong className="text-paper font-semibold">3 free lookups a week</strong>. No account needed.
               </p>
             </div>
-            {/* 引导去价格页的链接 */}
             <Link href="/pricing" className="text-chop hover:underline whitespace-nowrap mt-2 sm:mt-0">
               View pricing →
             </Link>
@@ -168,7 +181,19 @@ export default function Home() {
           )}
         </section>
 
-        {result && (
+                {/* 🔥 修改点：搜索时的 Loading 提示 */}
+        {loading && (
+          <div className="mt-9 flex flex-col items-center justify-center border-t border-line pt-10 pb-4">
+            {/* 这里可以放个转圈的小图标，用纯 CSS 实现 */}
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-chop"></div>
+            <p className="mt-4 text-sm text-muted animate-pulse">
+              Searching global registry... this may take a few seconds.
+            </p>
+          </div>
+        )}
+
+        {/* 只有非 loading 且有结果时，才显示列表 */}
+        {!loading && result && (
           <CompanyList
             companies={result.companies}
             translatedKeyword={result.translated_keyword}
@@ -180,9 +205,6 @@ export default function Home() {
             userId={userId}
           />
         )}
-
-        {/* 主页底部的 PricingSection 已被彻底移除 */}
-
       </div>
 
       <footer className="mt-20 border-t border-line bg-ink py-10 text-xs text-muted">
@@ -227,6 +249,7 @@ export default function Home() {
         onConfirm={confirmUnlock}
         userId={userId}
         companyId={pendingCompanyId}
+        // currentIndex={pendingIndex} // 🔥 新增传入
       />
       
       <Toast message={toast} />

@@ -94,26 +94,35 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
     async function load() {
       setLoading(true);
       setErrorMsg(null);
-      setReport(null);
-      setNeedPay(false);
+      
+      // 如果已解锁，强行关闭拦截，并尝试保留已有的数据（如果之前有）
+      if (unlocked) {
+        setNeedPay(false);
+      } else {
+        setReport(null); 
+      }
 
       try {
-        // 1. 检查限流
-        const limit = await checkViewLimit(userId, company.credit_code);
+        // 1. 如果未解锁，才去检查免费限流
+        if (!unlocked) {
+          const limit = await checkViewLimit(userId, company.credit_code);
 
-        if (!cancelled) {
-          if (!limit.canView) {
-            // 第 4 次查看，不调 FC，直接显示付款提示
-            setNeedPay(true);
-            setLoading(false);
-            return;
+          if (!cancelled) {
+            if (!limit.canView) {
+              // 次数用尽，显示付款提示，直接 return，不去拉数据
+              setNeedPay(true);
+              setLoading(false);
+              return;
+            }
+            setRemainingFree(limit.remainingFree);
           }
-          setRemainingFree(limit.remainingFree);
         }
 
-        // 2. 通过限流，调用 FC 获取数据（部分遮住）
+        // 2. 获取数据（无论是否解锁，只要走到这一步，就去拉数据。已解锁的直接跳过限流强制拉取）
         const data = await fetchDueDiligenceReport(company.credit_code);
-        if (!cancelled) setReport(data as DueDiligenceReport);
+        if (!cancelled) {
+          setReport(data as DueDiligenceReport);
+        }
       } catch (err: any) {
         if (!cancelled) {
           console.error('Fetch error:', err);
@@ -128,7 +137,7 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
     return () => {
       cancelled = true;
     };
-  }, [company.credit_code, userId, unlocked]); // 注意这里加了 unlocked，付款成功后重新触发拉取
+  }, [company.credit_code, userId, unlocked]); // 依赖 unlocked，付款后会重新触发
 
   const riskTone =
     report?.risk_level_en === 'High Risk'
@@ -159,8 +168,9 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
             masked ? 'select-none text-sm text-foreground blur-[5px]' : 'text-sm text-foreground'
           }
         >
+          {/* 如果正在加载且没有旧数据，显示 Loading... */}
           {loading && !report ? (
-            'Loading…'
+            <span className="text-muted animate-pulse">Loading…</span>
           ) : (
             <>
               {value}
@@ -196,23 +206,34 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
         </div>
       )}
 
-      {/* 超出免费次数：直接显示付款提示，不渲染 FC 数据 */}
-      {needPay && (
+      {/* 超出免费次数且未解锁：直接显示付款提示，不渲染 FC 数据 */}
+      {needPay && !unlocked && (
         <div className="mt-5 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-8 sm:py-10">
           <p className="text-sm leading-relaxed text-foreground">
             您本周的免费查看次数已用完（每周 3 次）。付款后可查看该企业的完整信息。
           </p>
           <button
             onClick={onUnlock}
-            className="w-full whitespace-nowrap bg-chop px-6 py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-[#D1442E] sm:w-auto"
+            disabled={loading}
+            className="w-full whitespace-nowrap bg-chop px-6 py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-[#D1442E] disabled:opacity-50 sm:w-auto"
           >
-            Unlock full report — $9.9
+             {loading ? 'Loading...' : 'Unlock full report — $9.9'}
           </button>
         </div>
       )}
 
-      {/* 正常展示（前 3 次或已付费解锁） */}
-      {!needPay && report && (
+      {/* 已解锁，但正在拉取数据时的全局 Loading */}
+      {unlocked && loading && !report && (
+         <div className="mt-8 flex flex-col items-center justify-center py-10">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-chop"></div>
+            <p className="mt-4 text-sm text-muted animate-pulse">
+              Generating your full report, please wait...
+            </p>
+         </div>
+      )}
+
+      {/* 正常展示（前 3 次或已付费解锁，且数据已加载） */}
+      {(!needPay || unlocked) && report && (
         <>
           {/* 剩余次数提示 */}
           {remainingFree !== null && !unlocked && (
