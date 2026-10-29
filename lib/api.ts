@@ -23,7 +23,7 @@ export async function checkViewLimit(userId: string, companyId: string): Promise
   return data as CheckLimitResult;
 }
 
-/** 付款后解锁本次查看 */
+/** 付款后解锁本次查看 
 export async function unlockReport(userId: string, companyId: string) {
   const res = await fetch('/api/unlock', {
     method: 'POST',
@@ -32,7 +32,7 @@ export async function unlockReport(userId: string, companyId: string) {
   });
   if (!res.ok) throw new Error('Unlock failed');
   return res.json();
-}
+}*/
 
 /**
  * 根据统一社会信用代码获取尽调报告数据

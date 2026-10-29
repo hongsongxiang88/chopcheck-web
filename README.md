@@ -7,6 +7,7 @@ cp .env.local.example .env.local   # 按需修改 ALIYUN_SEARCH_URL
 npm run dev
 二、
 安装 npm install @upstash/redis
+安装 npm install @paddle/paddle-js @paddle/paddle-node-sdk
 步骤1：启动模拟器 npx @sdk-e/redisk
 步骤2：修改 .env.local：
 UPSTASH_REDIS_REST_URL="http://127.0.0.1:18000"
@@ -69,6 +70,56 @@ UPSTASH_REDIS_REST_TOKEN="upstash"
 
 ## 在Vercel发布
 Vercel 就是 Next.js 官方公司做的托管平台,你把代码推到 GitHub,连接 Vercel 后它自动帮你 npm run build,然后全部搞定——不需要你自己配 Nginx、不需要自己管服务器、自带全球 CDN 和 HTTPS。这是目前做 Next.js 项目最简单的部署方式,而且你的目标用户是海外采购商,Vercel 在国外访问速度很好。
+我使用Vercel 提供的 Upstash Redis库，
+
+## Paddle 支付集成指南 (ChopCheck)
+```
+本项目使用 Paddle 作为全球支付与订阅管理网关。整体架构分为前端调起结账、后端验证 Webhook 并解锁、Upstash Redis 状态存储三个核心部分。
+📂 核心文件结构
+chopcheck-web/
+├── components/
+│   └── UnlockModal.tsx      # [前端] 支付弹窗组件（初始化 Paddle.js，拉起结账）
+├── app/
+│   ├── page.tsx             # [前端] 主页（管理解锁状态、生成用户 ID）
+│   └── api/
+│       └── webhook/
+│           └── route.ts     # [后端] 接收 Paddle 支付成功通知，验签并写入 Redis
+├── lib/
+│   └── api.ts               # [前端] 封装请求（注意：已移除假解锁接口）
+└── .env.local               # [环境] 本地环境变量（Vercel 部署需同步配置）
+🔄 整体支付与解锁逻辑
+1 用户发起支付：用户在 UnlockModal 点击支付，前端根据环境变量初始化 Paddle.js。调用 paddle.Checkout.open() 拉起 Paddle 结账弹窗。
+2 传递自定义数据：在拉起弹窗时，通过 customData 将当前浏览器生成的 userId 和当前要解锁公司的 companyId 传给 Paddle。
+3 Paddle 处理支付：用户在弹窗完成支付。
+4 Webhook 异步通知：Paddle 服务器向我们的后端 (/api/webhook) 发送 transaction.completed 事件。请求体包含支付状态以及我们传入的 customData。
+5 后端验签与解锁：后端使用 Paddle Node SDK 和 Webhook Secret 验证签名。验证通过后，提取 userId 和 companyId，向 Upstash Redis 写入解锁标记（带过期时间）。
+6 前端刷新状态：前端支付完成后给予提示，用户刷新页面或发起查询时，通过读取 Redis 确认已解锁。
+⚙️ 本地环境变量设置
+在本地开发时配置在 .env.local，线上（Vercel）需在控制台的 Environment Variables 中配置并重新部署（Redeploy）。
+1. Paddle 凭证
+PADDLE_API_KEY：Paddle 后端 API 密钥（Type: Secret，不要加 NEXT_PUBLIC_ 前缀）。
+NEXT_PUBLIC_PADDLE_CLIENT_TOKEN：Paddle 前端 Token（Type: Config，必须加 NEXT_PUBLIC_ 前缀供前端使用）。
+PADDLE_NOTIFICATION_WEBHOOK_SECRET：Paddle Webhook 签名密钥（Type: Secret）。
+NEXT_PUBLIC_PADDLE_ENV：设置为 production（或 sandbox 用于测试）。
+2. Upstash Redis 凭证 (Vercel 自动注入)
+本地开发必须使用真实的云 Redis 凭证（不要用 127.0.0.1）：
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+🛠️ Paddle 后台配置清单
+1 Catalog > Products：创建产品，获取对应价格的 ID（pri_... 开头），填入前端 UnlockModal.tsx。
+2 Developer Tools > Authentication：
+  创建 API Key -> 填到 PADDLE_API_KEY。
+  创建 Client-side token -> 填到 NEXT_PUBLIC_PADDLE_CLIENT_TOKEN。
+3 Developer Tools > Notifications：
+  创建 Webhook 目标，URL 填 https://你的域名/api/webhook。
+  勾选 transaction.completed 事件。
+  复制 Secret Key -> 填到 PADDLE_NOTIFICATION_WEBHOOK_SECRET。
+⚠️ 开发避坑指南（极其重要）
+1 后端必须使用 req.text()：在 app/api/webhook/route.ts 中，读取请求体绝对不能用 await req.json()，必须用 await req.text()。否则会导致 Paddle 验签失败（Signature mismatch）。
+2 不要暴露假解锁接口：曾经的 /api/unlock 接口必须删除或禁用，解锁权限只能由 Webhook 后台静默执行，防止用户白嫖。
+3 异步延迟：Paddle Webhook 到达后端通常有 1~3 秒延迟，前端支付成功后最好给出“正在解锁/请稍候刷新”的提示。
+4 防重复扣款/处理：Webhook 代码中一定要用 transaction.id 做防重放校验（幂等性），防止 Paddle 重复发送通知导致多次解锁或业务异常。
+```
 
 ## 项目结构
 ```

@@ -1,12 +1,46 @@
 'use client';
 
+import { initializePaddle, Paddle } from '@paddle/paddle-js';
+import { useEffect, useState } from 'react';
+
 type Props = {
-  onBuySingle: () => void;
+  onBuySingle?: () => void;
+  userId?: string;
+  companyId?: string;
+  priceId?: string; // Paddle 后台的产品价格 ID，以 pri_ 开头
 };
 
-export default function PricingSection({ onBuySingle }: Props) {
+export default function PricingSection({ onBuySingle, userId = '', companyId = '', priceId = 'pri_你的价格ID' }: Props) {
+  const [paddle, setPaddle] = useState<Paddle | null>(null);
+
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN) return;
+
+    // 直接使用环境变量初始化，去掉环境判断，默认走生产环境
+    initializePaddle({
+      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    }).then((p) => {
+      if (p) setPaddle(p);
+    });
+  }, []);
+
+  function handleBuy() {
+    // 如果有传自定义回调，优先走回调（方便父组件拦截）
+    if (onBuySingle) {
+      onBuySingle();
+      return;
+    }
+
+    // 否则直接调起 Paddle 弹窗
+    if (paddle) {
+      paddle.Checkout.open({
+        items: [{ priceId, quantity: 1 }],
+        customData: { userId, companyId }, // 关键：传给 Webhook 用于业务解扣
+      });
+    }
+  }
+
   return (
-    // 修改点 1：把 mt-20 改成了 mt-0，并删除了 border-t border-line pt-10
     <section className="mt-0 pb-10">
       <div className="text-center">
         <h3 className="font-serif text-xl font-medium text-paper sm:text-[22px]">Pricing</h3>
@@ -23,7 +57,7 @@ export default function PricingSection({ onBuySingle }: Props) {
           Includes bilingual AI risk narrative, shareholder details, and PDF export.
         </p>
         <button
-          onClick={onBuySingle}
+          onClick={handleBuy}
           className="mt-6 w-full bg-chop py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-[#D1442E]"
         >
           Unlock this report — $9.9
