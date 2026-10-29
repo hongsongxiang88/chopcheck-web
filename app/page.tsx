@@ -209,7 +209,40 @@ export default function Home() {
       </div>
 
       <footer className="mt-20 border-t border-line bg-ink py-10 text-xs text-muted">
-         {/* 保持你原来的 Footer 代码不变... */}
+        <div className="mx-auto max-w-3xl px-6 sm:px-7">
+          <div className="flex flex-col justify-between gap-8 sm:flex-row">
+            <div>
+              <div className="font-serif text-lg font-semibold text-paper">
+                Chop<span className="text-chop">Check</span>
+              </div>
+              <p className="mt-2 max-w-xs leading-relaxed">
+                Professional cross-border due diligence. Verify Chinese companies before you wire the deposit.
+              </p>
+            </div>
+            
+            <div className="flex gap-12">
+              <div className="flex flex-col gap-2.5">
+                <span className="font-semibold text-paper">Legal</span>
+                {/* 确保这些路由在你的 app 目录下真实存在，否则会 404 */}
+                <Link href="/privacy" className="hover:text-foreground">Privacy Policy</Link>
+                <Link href="/terms" className="hover:text-foreground">Terms of Service</Link>
+                <Link href="/refund" className="hover:text-foreground">Refund Policy</Link>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <span className="font-semibold text-paper">Support</span>
+                <Link href="/contact" className="hover:text-foreground">Contact Us</Link>
+                <a href="mailto:support@chopcheck.com" className="hover:text-foreground">Email Support</a>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-line pt-6 text-[11px] sm:flex-row">
+            <p>© {new Date().getFullYear()} ChopCheck. All rights reserved.</p>
+            <p>
+              Payments processed securely by <a href="https://paddle.com" target="_blank" rel="noreferrer" className="underline hover:text-foreground">Paddle.com</a>.
+            </p>
+          </div>
+        </div>
       </footer>
 
       {/* 🔥 修改点：将真实支付所需参数传入 UnlockModal */}

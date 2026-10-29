@@ -119,6 +119,20 @@ UPSTASH_REDIS_REST_TOKEN
 2 不要暴露假解锁接口：曾经的 /api/unlock 接口必须删除或禁用，解锁权限只能由 Webhook 后台静默执行，防止用户白嫖。
 3 异步延迟：Paddle Webhook 到达后端通常有 1~3 秒延迟，前端支付成功后最好给出“正在解锁/请稍候刷新”的提示。
 4 防重复扣款/处理：Webhook 代码中一定要用 transaction.id 做防重放校验（幂等性），防止 Paddle 重复发送通知导致多次解锁或业务异常。
+🛠️ Paddle配置检查
+1. 完成 Paddle 账户验证（最关键）
+你截图里的 02 Verify your account 还是灰色状态。在 Paddle Live 环境下，必须完成验证才能收款。你需要准备好营业执照（或身份证）、网站域名等信息，在 Paddle 后台 My account > Verification 提交审核。审核通过后，这个错误通常就会消失。
+2. 检查域名是否已添加并获批
+Paddle 要求你使用的网站域名必须通过审核。去 My account > Settings > Website approval，确认 duediligence.org 是否已经在列表里并且状态是 Approved。如果没加，Paddle 会拒绝在这个域名下创建结账。
+3. 核对环境变量（尤其是 Token 类型）
+你之前遇到过的 NEXT_PUBLIC_PADDLE_CLIENT_TOKEN 报错问题，再确认一次：
+在 Vercel 后台，PADDLE_API_KEY 和 PADDLE_NOTIFICATION_WEBHOOK_SECRET 的类型是 Secret（且不带 NEXT_PUBLIC_ 前缀）。
+NEXT_PUBLIC_PADDLE_CLIENT_TOKEN 的类型必须是 Config（因为它要暴露给浏览器）。如果你把它改成了 Secret 且没加前缀，前端 initializePaddle 可能拿不到 token，直接导致弹窗打不开。
+确认你填的 live_ 开头的 token，不是 test_ 开头的沙盒 token。
+4. 确认价格 ID 对应的产品状态
+你填在 UnlockModal.tsx 里的 pri_... 价格 ID，必须是 Live 环境里已经发布（Active）的状态。如果那个价格还在草稿状态，或者被归档了，也会报错。
+另外：先别急着测Live扣款：如果你还没完成账户验证，强烈建议你切回 Sandbox 沙盒环境。在沙盒里，你可以用测试卡号（比如 4242 4242 4242 4242）跑通全流程，验证前端弹窗、后端 Webhook、Redis 解锁是否正常。等沙盒彻底跑通了，再回来搞定 Live 验证。
+另外：查看 Vercel 日志：如果后端 Webhook 没收到请求，Vercel 的 Logs 里是不会有记录的。先确保支付弹窗能正常拉起来，再去看日志。
 ```
 
 ## 项目结构
