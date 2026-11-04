@@ -16,6 +16,8 @@ export default function Home() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   
   const [unlockedIndex, setUnlockedIndex] = useState<number | null>(null);
+  // 🔥 新增：正在验证支付的索引
+  const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   
   const [toast, setToast] = useState<string | null>(null);
@@ -23,7 +25,6 @@ export default function Home() {
 
   const [userId, setUserId] = useState('');
 
-  // 初始化用户 ID（真实环境建议从登录态获取，这里保留你的本地生成逻辑）
   useEffect(() => {
     let uid = localStorage.getItem('chopcheck_uid');
     if (!uid) {
@@ -50,6 +51,7 @@ export default function Home() {
     setResult(null);
     setSelectedIndex(null);
     setUnlockedIndex(null);
+    setVerifyingIndex(null);
 
     try {
       const res = await fetch('/api/search-company', {
@@ -80,25 +82,22 @@ export default function Home() {
   }
 
   function requestUnlock(index: number) {
-    if (unlockedIndex === index) {
-      showToast('This report is already unlocked.');
+    if (unlockedIndex === index || verifyingIndex === index) {
+      showToast('This report is already unlocked or being verified.');
       return;
     }
     setPendingIndex(index);
   }
 
-  // 🔥 真实环境支付回调（由 UnlockModal 调起 Paddle 支付成功后触发）
-  // 注意：真正靠谱的解锁是等 Paddle Webhook 发到后端，前端这里只做乐观 UI 更新
+  // 🔥 核心修改：支付完成后的回调
   function handlePaymentInitiated() {
     if (pendingIndex === null) return;
     const unlockedCompany = result?.companies[pendingIndex];
     
-    // 乐观更新：假设支付成功，直接展示（实际生产中建议轮询后端订单状态）
-    setUnlockedIndex(pendingIndex);
+    setVerifyingIndex(pendingIndex);
     setPendingIndex(null);
-    showToast('Processing payment... Report will unlock shortly.');
+    showToast('Payment successful! Verifying...');
     
-    // 滚动到对应位置
     setTimeout(() => {
       if (unlockedCompany) {
         const el = document.getElementById(`company-row-${unlockedCompany.credit_code}`);
@@ -109,13 +108,22 @@ export default function Home() {
     }, 100);
   }
 
+  // 🔥 新增：由子组件通知验证结束
+  function handleVerifiedSuccess(index: number) {
+    setUnlockedIndex(index);
+    setVerifyingIndex(null);
+    showToast('Report unlocked successfully!');
+  }
+
+  // 🔥 新增：如果用户关闭了弹窗但未支付，重置状态
+  function handlePaymentCancel() {
+    setPendingIndex(null);
+    setVerifyingIndex(null);
+  }
+
   const pendingCompanyId = pendingIndex !== null && result?.companies[pendingIndex] 
     ? result.companies[pendingIndex].credit_code 
     : '';
-    
-  //const pendingCompanyName = pendingIndex !== null && result?.companies[pendingIndex] 
-  //  ? result.companies[pendingIndex].company_name
-  //  : '';
 
   return (
     <main className="flex min-h-screen flex-col">
@@ -202,7 +210,9 @@ export default function Home() {
             selectedIndex={selectedIndex}
             onSelect={selectCompany}
             unlockedIndex={unlockedIndex}
+            verifyingIndex={verifyingIndex} // 传入验证状态
             onUnlock={requestUnlock}
+            onVerifiedSuccess={handleVerifiedSuccess} // 传入验证成功回调
             userId={userId}
           />
         )}
@@ -223,7 +233,6 @@ export default function Home() {
             <div className="flex gap-12">
               <div className="flex flex-col gap-2.5">
                 <span className="font-semibold text-paper">Legal</span>
-                {/* 确保这些路由在你的 app 目录下真实存在，否则会 404 */}
                 <Link href="/privacy" className="hover:text-foreground">Privacy Policy</Link>
                 <Link href="/terms" className="hover:text-foreground">Terms of Service</Link>
                 <Link href="/refund" className="hover:text-foreground">Refund Policy</Link>
@@ -245,14 +254,12 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* 🔥 修改点：将真实支付所需参数传入 UnlockModal */}
       <UnlockModal
         open={pendingIndex !== null}
-        onClose={() => setPendingIndex(null)}
-        onConfirm={handlePaymentInitiated} // 支付发起后的回调
+        onClose={handlePaymentCancel}
+        onConfirm={handlePaymentInitiated}
         userId={userId}
         companyId={pendingCompanyId}
-        //companyName={pendingCompanyName} // 建议传入公司名称，在 Paddle 弹窗里展示
       />
       
       <Toast message={toast} />

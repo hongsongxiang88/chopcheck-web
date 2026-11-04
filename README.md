@@ -70,7 +70,11 @@ UPSTASH_REDIS_REST_TOKEN="upstash"
 
 ## 在Vercel发布
 Vercel 就是 Next.js 官方公司做的托管平台,你把代码推到 GitHub,连接 Vercel 后它自动帮你 npm run build,然后全部搞定——不需要你自己配 Nginx、不需要自己管服务器、自带全球 CDN 和 HTTPS。这是目前做 Next.js 项目最简单的部署方式,而且你的目标用户是海外采购商,Vercel 在国外访问速度很好。
-我使用Vercel 提供的 Upstash Redis库，
+我使用Vercel 提供的 Upstash Redis库。
+参数1：NEXT_PUBLIC_PADDLE_ENV 值production，告诉代码当前运行的环境production 就走真实收款环境
+参数2：PADDLE_NOTIFICATION_WEBHOOK_SECRET 值是paddle后台创建Webhook时候Secret key，作用是当 Paddle 给你发通知说“这个人付钱了”时，你的后端不能直接信，必须用这个密钥去验证签名。验签通过，才能给用户写入 Redis 解锁报告，Type 为 Secret
+参数3：PADDLE_API_KEY 值你在 Paddle 后台 Developer Tools > Authentication 生成的 API Key（通常以 pdl_live_apikey_ 开头），这是你后端与 Paddle 服务器通信的“身份证”，Type 为 Secret
+参数4：NEXT_PUBLIC_PADDLE_CLIENT_TOKEN 值是你在 Paddle 后台生成的 Client-side token（以 live_ 开头），当用户在网页上点击“支付 $9.9”时，前端组件 UnlockModal.tsx 会读取这个 Token 来初始化 Paddle.js，并安全地弹出结账窗口。
 
 ## Paddle 支付集成指南 (ChopCheck)
 ```
@@ -133,6 +137,12 @@ NEXT_PUBLIC_PADDLE_CLIENT_TOKEN 的类型必须是 Config（因为它要暴露�
 你填在 UnlockModal.tsx 里的 pri_... 价格 ID，必须是 Live 环境里已经发布（Active）的状态。如果那个价格还在草稿状态，或者被归档了，也会报错。
 另外：先别急着测Live扣款：如果你还没完成账户验证，强烈建议你切回 Sandbox 沙盒环境。在沙盒里，你可以用测试卡号（比如 4242 4242 4242 4242）跑通全流程，验证前端弹窗、后端 Webhook、Redis 解锁是否正常。等沙盒彻底跑通了，再回来搞定 Live 验证。
 另外：查看 Vercel 日志：如果后端 Webhook 没收到请求，Vercel 的 Logs 里是不会有记录的。先确保支付弹窗能正常拉起来，再去看日志。
+5 设置默认支付链接
+Checkout -> Checkout configuration -> Default payment link
+Checkout -> Checkout configuration -> Payment methods
+Business account -> Payouts -> Payout settings
+My account -> Settings -> Sales tax / Balance currency
+My account -> Settings -> Currencies
 ```
 
 ## 项目结构

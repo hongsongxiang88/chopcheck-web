@@ -11,7 +11,6 @@ function statusStyle(status: string) {
   return 'text-muted';
 }
 
-/** FC 尽调接口返回结构 */
 export type DueDiligenceReport = {
   company_name_en: string;
   legal_person_en: string;
@@ -43,7 +42,6 @@ export type DueDiligenceReport = {
 type FieldDef = {
   key: keyof DueDiligenceReport;
   label: string;
-  /** 解锁前是否遮罩 */
   sensitive?: boolean;
 };
 
@@ -75,19 +73,21 @@ const COMPLIANCE_FIELDS: FieldDef[] = [
 
 type Props = {
   company: Company;
-  userId: string; // 必须传入 userId 来限制查看
+  userId: string;
   unlocked: boolean;
+  verifying: boolean; // 新增：是否正在验证支付
   onUnlock: () => void;
+  onVerifiedSuccess: () => void; // 新增：验证成功回调
 };
 
-export default function ReportPanel({ company, userId, unlocked, onUnlock }: Props) {
+export default function ReportPanel({ company, userId, unlocked, verifying, onUnlock, onVerifiedSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [report, setReport] = useState<DueDiligenceReport | null>(null);
   const [needPay, setNeedPay] = useState(false);
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
 
-  // 选中公司后，先查限流，通过后再拉 FC 报告
+  // 核心加载逻辑
   useEffect(() => {
     let cancelled = false;
 
@@ -95,11 +95,8 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
       setLoading(true);
       setErrorMsg(null);
       
-      // 如果已解锁，强行关闭拦截，并尝试保留已有的数据（如果之前有）
       if (unlocked) {
         setNeedPay(false);
-      } else {
-        setReport(null); 
       }
 
       try {
@@ -109,7 +106,6 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
 
           if (!cancelled) {
             if (!limit.canView) {
-              // 次数用尽，显示付款提示，直接 return，不去拉数据
               setNeedPay(true);
               setLoading(false);
               return;
@@ -118,7 +114,7 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
           }
         }
 
-        // 2. 获取数据（无论是否解锁，只要走到这一步，就去拉数据。已解锁的直接跳过限流强制拉取）
+        // 2. 拉取报告数据
         const data = await fetchDueDiligenceReport(company.credit_code);
         if (!cancelled) {
           setReport(data as DueDiligenceReport);
@@ -133,11 +129,37 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
       }
     }
 
-    load();
+    // 只有当通过支付验证，或者本来就解锁，或者没超限时才拉取数据
+    if (!verifying) {
+      load();
+    }
+    
     return () => {
       cancelled = true;
     };
-  }, [company.credit_code, userId, unlocked]); // 依赖 unlocked，付款后会重新触发
+  }, [company.credit_code, userId, unlocked, verifying]);
+
+  // 🔥 新增：轮询验证支付状态
+  useEffect(() => {
+    if (!verifying) return;
+
+    const interval = setInterval(async () => {
+      try {
+        // 请求 checkViewLimit 接口，看看后端 Redis 是否已经把这个公司标记为已解锁
+        const limit = await checkViewLimit(userId, company.credit_code);
+        
+        // 如果 isPaidView 为 true，说明后端已经收到了 Webhook 并写入了解锁标记
+        if (limit.isPaidView) {
+          clearInterval(interval);
+          onVerifiedSuccess(); // 通知父组件解锁成功
+        }
+      } catch (err) {
+        console.error("Verification poll error:", err);
+      }
+    }, 3000); // 每 3 秒查一次
+
+    return () => clearInterval(interval);
+  }, [verifying, userId, company.credit_code, onVerifiedSuccess]);
 
   const riskTone =
     report?.risk_level_en === 'High Risk'
@@ -168,7 +190,6 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
             masked ? 'select-none text-sm text-foreground blur-[5px]' : 'text-sm text-foreground'
           }
         >
-          {/* 如果正在加载且没有旧数据，显示 Loading... */}
           {loading && !report ? (
             <span className="text-muted animate-pulse">Loading…</span>
           ) : (
@@ -186,7 +207,6 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
 
   return (
     <section className="mt-4">
-      {/* 头部：公司名 → credit code → 状态 */}
       <div className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="font-serif text-lg font-medium text-paper sm:text-xl">{company.name}</h2>
@@ -206,11 +226,24 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
         </div>
       )}
 
-      {/* 超出免费次数且未解锁：直接显示付款提示，不渲染 FC 数据 */}
-      {needPay && !unlocked && (
+      {/* 🔥 支付验证中的等待状态 */}
+      {verifying && (
+        <div className="mt-8 flex flex-col items-center justify-center py-12 border border-line bg-panel/50">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-chop mb-4"></div>
+          <p className="text-sm text-foreground font-medium animate-pulse">
+            Verifying your payment...
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            This may take a minute (especially for WeChat Pay). Please wait and do not close this page.
+          </p>
+        </div>
+      )}
+
+      {/* 超出免费次数且未解锁：显示付款提示 */}
+      {needPay && !unlocked && !verifying && (
         <div className="mt-5 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-8 sm:py-10">
           <p className="text-sm leading-relaxed text-foreground">
-            您本周的免费查看次数已用完（每周 3 次）。付款后可查看该企业的完整信息。
+            You have used all 3 free lookups this week. Pay to unlock the full report.
           </p>
           <button
             onClick={onUnlock}
@@ -222,27 +255,15 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
         </div>
       )}
 
-      {/* 已解锁，但正在拉取数据时的全局 Loading */}
-      {unlocked && loading && !report && (
-         <div className="mt-8 flex flex-col items-center justify-center py-10">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-chop"></div>
-            <p className="mt-4 text-sm text-muted animate-pulse">
-              Generating your full report, please wait...
-            </p>
-         </div>
-      )}
-
-      {/* 正常展示（前 3 次或已付费解锁，且数据已加载） */}
-      {(!needPay || unlocked) && report && (
+      {/* 正常展示 */}
+      {(!needPay || unlocked) && !verifying && report && (
         <>
-          {/* 剩余次数提示 */}
           {remainingFree !== null && !unlocked && (
             <div className="mt-4 text-xs font-mono text-muted">
-              本周剩余免费查看次数：{remainingFree}
+              Free lookups remaining this week: {remainingFree}
             </div>
           )}
 
-          {/* 1) 风险等级 + Highlights / Risk points */}
           <div className="mt-5 flex flex-col gap-4 border border-line bg-panel p-5">
             <div className="flex flex-wrap items-center gap-3">
               <span className={`border px-2.5 py-1 text-xs font-semibold ${riskTone}`}>
@@ -278,7 +299,6 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
             </div>
           </div>
 
-          {/* 2) Comprehensive evaluation */}
           <div className="mt-4 border border-line bg-panel2 p-5">
             <div className="text-[11px] uppercase tracking-wide text-muted">
               Comprehensive evaluation
@@ -289,14 +309,12 @@ export default function ReportPanel({ company, userId, unlocked, onUnlock }: Pro
             </p>
           </div>
 
-          {/* 3) 基本 / 资本 / 合规字段 */}
           <div className="mt-4 divide-y divide-line border border-line">
             {BASIC_FIELDS.map(renderRow)}
             {CAPITAL_FIELDS.map(renderRow)}
             {COMPLIANCE_FIELDS.map(renderRow)}
           </div>
 
-          {/* 解锁 / 已解锁状态条 */}
           {!unlocked ? (
             <div className="mt-4 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
               <p className="max-w-sm text-[13px] leading-relaxed text-muted">

@@ -62,7 +62,7 @@ export default function UnlockModal({ open, onClose, onConfirm, userId, companyI
           displayMode: 'overlay',
           variant: 'one-page',
           // 支付成功后，Paddle 会重定向回这个页面
-          successUrl: window.location.href, 
+          // successUrl: window.location.href, 
         },
       });
     } catch (error) {
