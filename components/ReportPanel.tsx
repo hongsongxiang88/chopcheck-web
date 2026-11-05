@@ -152,31 +152,30 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
     return () => clearInterval(interval);
   }, [verifying, userId, company.credit_code, onVerifiedSuccess]);
 
-  // 🔥 完美纯净版导出方案
+  // 🔥 核心修复：直接用 DOM 操作，只截取包含 id 的这一块
   const handleExportPDF = () => {
     const element = document.getElementById(`report-print-area-${company.credit_code}`);
-    if (!element) return;
+    if (!element) {
+      alert('Print area not found!');
+      return;
+    }
 
-    // 1. 备份网页原本的内容
+    // 1. 保存当前网页
     const originalBody = document.body.innerHTML;
 
-    // 2. 构造一个全新的、纯白底黑字的 HTML 页面，里面只放入报告内容
-    const printContent = `
-      <div style="background: white; color: black; padding: 40px; font-family: sans-serif;">
-        ${element.innerHTML}
-      </div>
-    `;
-
-    // 3. 临时替换整个网页的 body
+    // 2. 制作纯净的打印页（白底黑字，只放这一家公司的数据）
+    const printContent = `<div style="background: white; color: black; padding: 40px; font-family: sans-serif;">${element.innerHTML}</div>`;
+    
+    // 3. 覆盖整个网页
     document.body.innerHTML = printContent;
 
-    // 4. 呼出浏览器打印
+    // 4. 调出打印
     window.print();
 
-    // 5. 打印结束后（关闭弹窗），把原来的网页瞬间恢复
+    // 5. 恢复网页
     setTimeout(() => {
       document.body.innerHTML = originalBody;
-      window.location.reload(); // 刷新一下防止 React 绑定失效
+      window.location.reload();
     }, 500);
   };
 
@@ -226,10 +225,9 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
 
   return (
     <section className="mt-4">
-      {/* 🔥 给核心内容包裹 id，这是唯一会被提取打印的区域 */}
+      {/* 🔥 这里非常重要，我们给这份报告的所有内容包裹了一个独一无二的 ID */}
       <div id={`report-print-area-${company.credit_code}`}>
         
-        {/* 头部：英文大字，中文小字 */}
         <div className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="font-serif text-lg font-medium text-paper sm:text-xl">
@@ -281,7 +279,6 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
           </div>
         )}
 
-        {/* 报表正文 */}
         {(!needPay || unlocked) && !verifying && report && (
           <>
             {remainingFree !== null && !unlocked && (
@@ -342,9 +339,9 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
             </div>
           </>
         )}
-      </div>
+      </div> {/* 🔥 包裹结束 */}
 
-      {/* 底部状态栏 */}
+      {/* 底部状态栏（它不包含在打印区域的 ID 里，所以打印时会被去掉） */}
       {!needPay && !verifying && report && (
         !unlocked ? (
           <div className="mt-4 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
