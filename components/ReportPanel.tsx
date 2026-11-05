@@ -152,16 +152,32 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
     return () => clearInterval(interval);
   }, [verifying, userId, company.credit_code, onVerifiedSuccess]);
 
-  // 🔥 核心功能：调用浏览器原生打印，导出为 PDF（强制白底黑字）
+  // 🔥 完美纯净版导出方案
   const handleExportPDF = () => {
-    // 1. 临时给 body 加个特定 class，方便我们在 CSS 里覆盖颜色
-    document.body.classList.add('printing-mode');
-    // 2. 调用浏览器打印
+    const element = document.getElementById(`report-print-area-${company.credit_code}`);
+    if (!element) return;
+
+    // 1. 备份网页原本的内容
+    const originalBody = document.body.innerHTML;
+
+    // 2. 构造一个全新的、纯白底黑字的 HTML 页面，里面只放入报告内容
+    const printContent = `
+      <div style="background: white; color: black; padding: 40px; font-family: sans-serif;">
+        ${element.innerHTML}
+      </div>
+    `;
+
+    // 3. 临时替换整个网页的 body
+    document.body.innerHTML = printContent;
+
+    // 4. 呼出浏览器打印
     window.print();
-    // 3. 打印弹窗关闭后移除 class
+
+    // 5. 打印结束后（关闭弹窗），把原来的网页瞬间恢复
     setTimeout(() => {
-      document.body.classList.remove('printing-mode');
-    }, 1000);
+      document.body.innerHTML = originalBody;
+      window.location.reload(); // 刷新一下防止 React 绑定失效
+    }, 500);
   };
 
   const riskTone =
@@ -184,13 +200,13 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
     const isLegalPerson = field.key === 'legal_person_en';
 
     return (
-      <div key={field.key} className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:gap-6 print:flex-row print:border-b print:border-gray-300">
-        <span className="text-[11px] uppercase tracking-wide text-muted sm:w-56 sm:shrink-0 print:text-gray-500 print:w-56">
+      <div key={field.key} className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:gap-6">
+        <span className="text-[11px] uppercase tracking-wide text-muted sm:w-56 sm:shrink-0">
           {field.label}
         </span>
         <span
           className={
-            masked ? 'select-none text-sm text-foreground blur-[5px]' : 'text-sm text-foreground print:text-black'
+            masked ? 'select-none text-sm text-foreground blur-[5px]' : 'text-sm text-foreground'
           }
         >
           {loading && !report ? (
@@ -210,15 +226,22 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
 
   return (
     <section className="mt-4">
-      {/* 🔥 给核心内容包裹 id，打印时只显示这一块 */}
-      <div id={`report-print-area-${company.credit_code}`} className="print:p-8 print:bg-white">
-        <div className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between print:border-gray-300">
+      {/* 🔥 给核心内容包裹 id，这是唯一会被提取打印的区域 */}
+      <div id={`report-print-area-${company.credit_code}`}>
+        
+        {/* 头部：英文大字，中文小字 */}
+        <div className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="font-serif text-lg font-medium text-paper sm:text-xl print:text-black print:text-2xl">{company.name}</h2>
-            <div className="mt-1.5 font-mono text-xs text-muted print:text-gray-600">
-              Unified credit code: <span className="text-foreground print:text-black">{company.credit_code}</span>
+            <h2 className="font-serif text-lg font-medium text-paper sm:text-xl">
+              {company.name_en || company.name}
+            </h2>
+            <div className="text-sm text-muted mt-1">
+              {company.name}
             </div>
-            <div className="mt-1.5 font-mono text-xs text-muted print:text-gray-600">
+            <div className="mt-2 font-mono text-xs text-muted">
+              Unified credit code: <span className="text-foreground">{company.credit_code}</span>
+            </div>
+            <div className="mt-1.5 font-mono text-xs text-muted">
               EST. {company.establish_date} · STATUS:{' '}
               <span className={statusStyle(company.status)}>{company.status}</span>
             </div>
@@ -226,13 +249,13 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
         </div>
 
         {errorMsg && (
-          <div className="mt-4 border border-chop-dim bg-chop/10 p-3 text-xs text-chop print:hidden">
+          <div className="mt-4 border border-chop-dim bg-chop/10 p-3 text-xs text-chop">
             {errorMsg}
           </div>
         )}
 
         {verifying && (
-          <div className="mt-8 flex flex-col items-center justify-center py-12 border border-line bg-panel/50 print:hidden">
+          <div className="mt-8 flex flex-col items-center justify-center py-12 border border-line bg-panel/50">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-chop mb-4"></div>
             <p className="text-sm text-foreground font-medium animate-pulse">
               Verifying your payment...
@@ -244,7 +267,7 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
         )}
 
         {needPay && !unlocked && !verifying && (
-          <div className="mt-5 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-8 sm:py-10 print:hidden">
+          <div className="mt-5 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-8 sm:py-10">
             <p className="text-sm leading-relaxed text-foreground">
               You have used all 3 free lookups this week. Pay to unlock the full report.
             </p>
@@ -258,60 +281,61 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
           </div>
         )}
 
+        {/* 报表正文 */}
         {(!needPay || unlocked) && !verifying && report && (
           <>
             {remainingFree !== null && !unlocked && (
-              <div className="mt-4 text-xs font-mono text-muted print:hidden">
+              <div className="mt-4 text-xs font-mono text-muted">
                 Free lookups remaining this week: {remainingFree}
               </div>
             )}
 
-            <div className="mt-5 flex flex-col gap-4 border border-line bg-panel p-5 print:border-gray-300 print:bg-white">
+            <div className="mt-5 flex flex-col gap-4 border border-line bg-panel p-5">
               <div className="flex flex-wrap items-center gap-3">
-                <span className={`border px-2.5 py-1 text-xs font-semibold ${riskTone} print:border-gray-500 print:text-black`}>
+                <span className={`border px-2.5 py-1 text-xs font-semibold ${riskTone}`}>
                   {report.risk_level_en}
                 </span>
-                <span className="text-xs text-muted print:text-gray-600">{report.risk_level_cn}</span>
+                <span className="text-xs text-muted">{report.risk_level_cn}</span>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <div className="text-[11px] uppercase tracking-wide text-jade print:text-black print:font-bold">Highlights</div>
-                  <ul className="mt-2 space-y-1 text-sm text-foreground print:text-black">
+                  <div className="text-[11px] uppercase tracking-wide text-jade">Highlights</div>
+                  <ul className="mt-2 space-y-1 text-sm text-foreground">
                     {(report.highlights_en || []).map((h, i) => (
                       <li key={i}>· {h}</li>
                     ))}
                   </ul>
-                  <div className="mt-1.5 text-xs text-muted print:text-gray-600">
+                  <div className="mt-1.5 text-xs text-muted">
                     {(report.highlights_cn || []).join(' · ')}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-[11px] uppercase tracking-wide text-chop print:text-black print:font-bold">Risk points</div>
-                  <ul className="mt-2 space-y-1 text-sm text-foreground print:text-black">
+                  <div className="text-[11px] uppercase tracking-wide text-chop">Risk points</div>
+                  <ul className="mt-2 space-y-1 text-sm text-foreground">
                     {(report.risk_points_en || []).map((r, i) => (
                       <li key={i}>· {r}</li>
                     ))}
                   </ul>
-                  <div className="mt-1.5 text-xs text-muted print:text-gray-600">
+                  <div className="mt-1.5 text-xs text-muted">
                     {(report.risk_points_cn || []).join(' · ')}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 border border-line bg-panel2 p-5 print:border-gray-300 print:bg-white">
-              <div className="text-[11px] uppercase tracking-wide text-muted print:text-black print:font-bold">
+            <div className="mt-4 border border-line bg-panel2 p-5">
+              <div className="text-[11px] uppercase tracking-wide text-muted">
                 Comprehensive evaluation
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-foreground print:text-black">{report.evaluation_en}</p>
-              <p className="mt-3 border-t border-line pt-3 text-[13px] leading-relaxed text-muted print:border-gray-300 print:text-gray-600">
+              <p className="mt-3 text-sm leading-relaxed text-foreground">{report.evaluation_en}</p>
+              <p className="mt-3 border-t border-line pt-3 text-[13px] leading-relaxed text-muted">
                 {report.evaluation_cn}
               </p>
             </div>
 
-            <div className="mt-4 divide-y divide-line border border-line print:divide-gray-300 print:border-gray-300">
+            <div className="mt-4 divide-y divide-line border border-line">
               {BASIC_FIELDS.map(renderRow)}
               {CAPITAL_FIELDS.map(renderRow)}
               {COMPLIANCE_FIELDS.map(renderRow)}
@@ -320,10 +344,10 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
         )}
       </div>
 
-      {/* 底部状态栏（不要包在打印区域里） */}
+      {/* 底部状态栏 */}
       {!needPay && !verifying && report && (
         !unlocked ? (
-          <div className="mt-4 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-6 sm:flex-row sm:items-center sm:justify-between print:hidden">
+          <div className="mt-4 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-sm text-[13px] leading-relaxed text-muted">
               <strong className="font-semibold text-foreground">Full report — $9.9.</strong> Unlocks
               shareholders, enforcement detail, address classification, and a bilingual AI risk
@@ -338,7 +362,7 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
             </button>
           </div>
         ) : (
-          <div className="mt-4 flex flex-col items-start gap-4 border border-jade-dim bg-jade/[0.08] px-6 py-5 sm:flex-row sm:items-center sm:justify-between print:hidden">
+          <div className="mt-4 flex flex-col items-start gap-4 border border-jade-dim bg-jade/[0.08] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[13px] text-jade">Report unlocked · saved to your query history</p>
             <button 
               onClick={handleExportPDF}

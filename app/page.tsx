@@ -24,7 +24,6 @@ export default function Home() {
 
   const [userId, setUserId] = useState('');
 
-  // 初始化并监听广播
   useEffect(() => {
     let uid = localStorage.getItem('chopcheck_uid');
     if (!uid) {
@@ -34,23 +33,45 @@ export default function Home() {
       localStorage.setItem('chopcheck_uid', uid);
     }
     setUserId(uid);
+  }, []);
 
-    // 🔥 监听 Paddle 支付完成的广播
-    const bc = new BroadcastChannel('paddle_checkout');
-    bc.onmessage = (event) => {
-      if (event.data?.type === 'PAYMENT_SUCCESS') {
-        // 如果是在新标签页扫码付的，当前页面会自动触发验证
-        if (pendingIndex === null && selectedIndex !== null) {
-           setVerifyingIndex(selectedIndex);
-           showToast('Payment successful! Verifying...');
-        } else {
-           handlePaymentInitiated();
+  // 🔥 新增：全局支付轮询监听器
+  useEffect(() => {
+    if (pendingIndex === null && verifyingIndex === null) return;
+    if (!userId) return;
+
+    const targetCompanyId = pendingIndex !== null && result?.companies[pendingIndex]
+      ? result.companies[pendingIndex].credit_code
+      : (verifyingIndex !== null && result?.companies[verifyingIndex] ? result.companies[verifyingIndex].credit_code : null);
+
+    if (!targetCompanyId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/check-limit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, companyId: targetCompanyId }),
+        });
+        const data = await res.json();
+        
+        if (data.isPaidView === true) {
+          clearInterval(interval);
+          
+          if (pendingIndex !== null) setPendingIndex(null);
+          
+          const targetIndex = pendingIndex !== null ? pendingIndex : verifyingIndex;
+          if (targetIndex !== null) {
+            handleVerifiedSuccess(targetIndex);
+          }
         }
+      } catch (err) {
+        console.error('Polling error', err);
       }
-    };
+    }, 3000);
 
-    return () => bc.close();
-  }, [pendingIndex, selectedIndex]);
+    return () => clearInterval(interval);
+  }, [pendingIndex, verifyingIndex, userId, result]);
 
   function showToast(message: string) {
     setToast(message);
@@ -140,7 +161,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col">
-      <header className="border-b border-line">
+      <header className="border-b border-line print:hidden">
         <div className="mx-auto flex max-w-3xl items-baseline justify-between px-6 py-5 sm:px-7">
           <div>
             <div className="font-serif text-xl font-semibold sm:text-[22px]">
@@ -159,7 +180,7 @@ export default function Home() {
       </header>
 
       <div className="mx-auto w-full max-w-3xl flex-1 px-6 sm:px-7">
-        <section className="pb-8 pt-12 sm:pt-16">
+        <section className="pb-8 pt-12 sm:pt-16 print:hidden">
           <h1 className="max-w-lg font-serif text-[28px] font-medium leading-tight text-paper sm:text-4xl">
             Search a company name. See what&apos;s behind the chop.
           </h1>
@@ -193,7 +214,7 @@ export default function Home() {
         </section>
 
         {loading && (
-          <div className="mt-9 flex flex-col items-center justify-center border-t border-line pt-10 pb-4">
+          <div className="mt-9 flex flex-col items-center justify-center border-t border-line pt-10 pb-4 print:hidden">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-chop"></div>
             <p className="mt-4 text-sm text-muted animate-pulse">Searching global registry... this may take a few seconds.</p>
           </div>
@@ -215,7 +236,7 @@ export default function Home() {
         )}
       </div>
 
-      <footer className="mt-20 border-t border-line bg-ink py-10 text-xs text-muted">
+      <footer className="mt-20 border-t border-line bg-ink py-10 text-xs text-muted print:hidden">
         <div className="mx-auto max-w-3xl px-6 sm:px-7">
           <div className="flex flex-col justify-between gap-8 sm:flex-row">
             <div>
