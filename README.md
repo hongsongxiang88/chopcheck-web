@@ -144,6 +144,12 @@ Business account -> Payouts -> Payout settings
 My account -> Settings -> Sales tax / Balance currency
 My account -> Settings -> Currencies
 ```
+## VSCODE代码传GitHub失败
+1 清除失效代理
+git config --global --unset http.proxy
+git config --global --unset https.proxy
+2 直接强制推送
+git push origin master
 
 ## 项目结构
 ```
