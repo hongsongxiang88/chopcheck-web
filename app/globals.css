@@ -9,3 +9,23 @@ html {
 body {
   min-height: 100vh;
 }
+
+/* 打印模式样式 */
+@media print {
+  /* 隐藏全局导航栏、页脚、按钮等不需要打印的元素 */
+  header, footer, nav, button, .print\:hidden {
+    display: none !important;
+  }
+  
+  /* 强制白底黑字 */
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+
+  /* 让打印区域占满页面 */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

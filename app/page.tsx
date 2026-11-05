@@ -16,7 +16,6 @@ export default function Home() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   
   const [unlockedIndex, setUnlockedIndex] = useState<number | null>(null);
-  // 🔥 新增：正在验证支付的索引
   const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   
@@ -25,6 +24,7 @@ export default function Home() {
 
   const [userId, setUserId] = useState('');
 
+  // 初始化并监听广播
   useEffect(() => {
     let uid = localStorage.getItem('chopcheck_uid');
     if (!uid) {
@@ -34,7 +34,23 @@ export default function Home() {
       localStorage.setItem('chopcheck_uid', uid);
     }
     setUserId(uid);
-  }, []);
+
+    // 🔥 监听 Paddle 支付完成的广播
+    const bc = new BroadcastChannel('paddle_checkout');
+    bc.onmessage = (event) => {
+      if (event.data?.type === 'PAYMENT_SUCCESS') {
+        // 如果是在新标签页扫码付的，当前页面会自动触发验证
+        if (pendingIndex === null && selectedIndex !== null) {
+           setVerifyingIndex(selectedIndex);
+           showToast('Payment successful! Verifying...');
+        } else {
+           handlePaymentInitiated();
+        }
+      }
+    };
+
+    return () => bc.close();
+  }, [pendingIndex, selectedIndex]);
 
   function showToast(message: string) {
     setToast(message);
@@ -89,7 +105,6 @@ export default function Home() {
     setPendingIndex(index);
   }
 
-  // 🔥 核心修改：支付完成后的回调
   function handlePaymentInitiated() {
     if (pendingIndex === null) return;
     const unlockedCompany = result?.companies[pendingIndex];
@@ -108,14 +123,12 @@ export default function Home() {
     }, 100);
   }
 
-  // 🔥 新增：由子组件通知验证结束
   function handleVerifiedSuccess(index: number) {
     setUnlockedIndex(index);
     setVerifyingIndex(null);
     showToast('Report unlocked successfully!');
   }
 
-  // 🔥 新增：如果用户关闭了弹窗但未支付，重置状态
   function handlePaymentCancel() {
     setPendingIndex(null);
     setVerifyingIndex(null);
@@ -138,15 +151,9 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted">
-            <Link href="/pricing" className="hover:text-foreground">
-              Pricing
-            </Link>
-            <Link href="/blog" className="hover:text-foreground">
-              Blog
-            </Link>
-            <a href="#" className="hover:text-foreground">
-              Sign in
-            </a>
+            <Link href="/pricing" className="hover:text-foreground">Pricing</Link>
+            <Link href="/blog" className="hover:text-foreground">Blog</Link>
+            <a href="#" className="hover:text-foreground">Sign in</a>
           </div>
         </div>
       </header>
@@ -174,31 +181,21 @@ export default function Home() {
 
           <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm text-muted sm:text-[13px]">
             <div>
-              <p className="mb-1">
-                Search by English keyword, Chinese keyword, or Unified Social Credit Code.
-              </p>
-              <p>
-                Try a sample search like <span className="text-paper">"zijing"</span> and get <strong className="text-paper font-semibold">3 free lookups a week</strong>. No account needed.
-              </p>
+              <p className="mb-1">Search by English keyword, Chinese keyword, or Unified Social Credit Code.</p>
+              <p>Try a sample search like <span className="text-paper">"zijing"</span> and get <strong className="text-paper font-semibold">3 free lookups a week</strong>. No account needed.</p>
             </div>
-            <Link href="/pricing" className="text-chop hover:underline whitespace-nowrap mt-2 sm:mt-0">
-              View pricing →
-            </Link>
+            <Link href="/pricing" className="text-chop hover:underline whitespace-nowrap mt-2 sm:mt-0">View pricing →</Link>
           </div>
 
           {error && (
-            <p className="mt-3 border border-chop-dim bg-chop/[0.06] px-4 py-3 text-sm text-chop">
-              {error}
-            </p>
+            <p className="mt-3 border border-chop-dim bg-chop/[0.06] px-4 py-3 text-sm text-chop">{error}</p>
           )}
         </section>
 
         {loading && (
           <div className="mt-9 flex flex-col items-center justify-center border-t border-line pt-10 pb-4">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-chop"></div>
-            <p className="mt-4 text-sm text-muted animate-pulse">
-              Searching global registry... this may take a few seconds.
-            </p>
+            <p className="mt-4 text-sm text-muted animate-pulse">Searching global registry... this may take a few seconds.</p>
           </div>
         )}
 
@@ -210,9 +207,9 @@ export default function Home() {
             selectedIndex={selectedIndex}
             onSelect={selectCompany}
             unlockedIndex={unlockedIndex}
-            verifyingIndex={verifyingIndex} // 传入验证状态
+            verifyingIndex={verifyingIndex}
             onUnlock={requestUnlock}
-            onVerifiedSuccess={handleVerifiedSuccess} // 传入验证成功回调
+            onVerifiedSuccess={handleVerifiedSuccess}
             userId={userId}
           />
         )}
@@ -222,14 +219,9 @@ export default function Home() {
         <div className="mx-auto max-w-3xl px-6 sm:px-7">
           <div className="flex flex-col justify-between gap-8 sm:flex-row">
             <div>
-              <div className="font-serif text-lg font-semibold text-paper">
-                Chop<span className="text-chop">Check</span>
-              </div>
-              <p className="mt-2 max-w-xs leading-relaxed">
-                Professional cross-border due diligence. Verify Chinese companies before you wire the deposit.
-              </p>
+              <div className="font-serif text-lg font-semibold text-paper">Chop<span className="text-chop">Check</span></div>
+              <p className="mt-2 max-w-xs leading-relaxed">Professional cross-border due diligence. Verify Chinese companies before you wire the deposit.</p>
             </div>
-            
             <div className="flex gap-12">
               <div className="flex flex-col gap-2.5">
                 <span className="font-semibold text-paper">Legal</span>
@@ -244,12 +236,9 @@ export default function Home() {
               </div>
             </div>
           </div>
-          
           <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-line pt-6 text-[11px] sm:flex-row">
             <p>© {new Date().getFullYear()} ChopCheck. All rights reserved.</p>
-            <p>
-              Payments processed securely by <a href="https://paddle.com" target="_blank" rel="noreferrer" className="underline hover:text-foreground">Paddle.com</a>.
-            </p>
+            <p>Payments processed securely by <a href="https://paddle.com" target="_blank" rel="noreferrer" className="underline hover:text-foreground">Paddle.com</a>.</p>
           </div>
         </div>
       </footer>

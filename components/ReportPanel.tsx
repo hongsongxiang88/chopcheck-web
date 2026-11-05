@@ -75,9 +75,9 @@ type Props = {
   company: Company;
   userId: string;
   unlocked: boolean;
-  verifying: boolean; // 新增：是否正在验证支付
+  verifying: boolean;
   onUnlock: () => void;
-  onVerifiedSuccess: () => void; // 新增：验证成功回调
+  onVerifiedSuccess: () => void;
 };
 
 export default function ReportPanel({ company, userId, unlocked, verifying, onUnlock, onVerifiedSuccess }: Props) {
@@ -87,7 +87,6 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
   const [needPay, setNeedPay] = useState(false);
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
 
-  // 核心加载逻辑
   useEffect(() => {
     let cancelled = false;
 
@@ -100,10 +99,8 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
       }
 
       try {
-        // 1. 如果未解锁，才去检查免费限流
         if (!unlocked) {
           const limit = await checkViewLimit(userId, company.credit_code);
-
           if (!cancelled) {
             if (!limit.canView) {
               setNeedPay(true);
@@ -114,7 +111,6 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
           }
         }
 
-        // 2. 拉取报告数据
         const data = await fetchDueDiligenceReport(company.credit_code);
         if (!cancelled) {
           setReport(data as DueDiligenceReport);
@@ -129,7 +125,6 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
       }
     }
 
-    // 只有当通过支付验证，或者本来就解锁，或者没超限时才拉取数据
     if (!verifying) {
       load();
     }
@@ -139,27 +134,35 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
     };
   }, [company.credit_code, userId, unlocked, verifying]);
 
-  // 🔥 新增：轮询验证支付状态
   useEffect(() => {
     if (!verifying) return;
 
     const interval = setInterval(async () => {
       try {
-        // 请求 checkViewLimit 接口，看看后端 Redis 是否已经把这个公司标记为已解锁
         const limit = await checkViewLimit(userId, company.credit_code);
-        
-        // 如果 isPaidView 为 true，说明后端已经收到了 Webhook 并写入了解锁标记
         if (limit.isPaidView) {
           clearInterval(interval);
-          onVerifiedSuccess(); // 通知父组件解锁成功
+          onVerifiedSuccess();
         }
       } catch (err) {
         console.error("Verification poll error:", err);
       }
-    }, 3000); // 每 3 秒查一次
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [verifying, userId, company.credit_code, onVerifiedSuccess]);
+
+  // 🔥 核心功能：调用浏览器原生打印，导出为 PDF（强制白底黑字）
+  const handleExportPDF = () => {
+    // 1. 临时给 body 加个特定 class，方便我们在 CSS 里覆盖颜色
+    document.body.classList.add('printing-mode');
+    // 2. 调用浏览器打印
+    window.print();
+    // 3. 打印弹窗关闭后移除 class
+    setTimeout(() => {
+      document.body.classList.remove('printing-mode');
+    }, 1000);
+  };
 
   const riskTone =
     report?.risk_level_en === 'High Risk'
@@ -181,13 +184,13 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
     const isLegalPerson = field.key === 'legal_person_en';
 
     return (
-      <div key={field.key} className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:gap-6">
-        <span className="text-[11px] uppercase tracking-wide text-muted sm:w-56 sm:shrink-0">
+      <div key={field.key} className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:gap-6 print:flex-row print:border-b print:border-gray-300">
+        <span className="text-[11px] uppercase tracking-wide text-muted sm:w-56 sm:shrink-0 print:text-gray-500 print:w-56">
           {field.label}
         </span>
         <span
           className={
-            masked ? 'select-none text-sm text-foreground blur-[5px]' : 'text-sm text-foreground'
+            masked ? 'select-none text-sm text-foreground blur-[5px]' : 'text-sm text-foreground print:text-black'
           }
         >
           {loading && !report ? (
@@ -207,138 +210,144 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
 
   return (
     <section className="mt-4">
-      <div className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="font-serif text-lg font-medium text-paper sm:text-xl">{company.name}</h2>
-          <div className="mt-1.5 font-mono text-xs text-muted">
-            Unified credit code: <span className="text-foreground">{company.credit_code}</span>
-          </div>
-          <div className="mt-1.5 font-mono text-xs text-muted">
-            EST. {company.establish_date} · STATUS:{' '}
-            <span className={statusStyle(company.status)}>{company.status}</span>
-          </div>
-        </div>
-      </div>
-
-      {errorMsg && (
-        <div className="mt-4 border border-chop-dim bg-chop/10 p-3 text-xs text-chop">
-          {errorMsg}
-        </div>
-      )}
-
-      {/* 🔥 支付验证中的等待状态 */}
-      {verifying && (
-        <div className="mt-8 flex flex-col items-center justify-center py-12 border border-line bg-panel/50">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-chop mb-4"></div>
-          <p className="text-sm text-foreground font-medium animate-pulse">
-            Verifying your payment...
-          </p>
-          <p className="mt-2 text-xs text-muted">
-            This may take a minute (especially for WeChat Pay). Please wait and do not close this page.
-          </p>
-        </div>
-      )}
-
-      {/* 超出免费次数且未解锁：显示付款提示 */}
-      {needPay && !unlocked && !verifying && (
-        <div className="mt-5 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-8 sm:py-10">
-          <p className="text-sm leading-relaxed text-foreground">
-            You have used all 3 free lookups this week. Pay to unlock the full report.
-          </p>
-          <button
-            onClick={onUnlock}
-            disabled={loading}
-            className="w-full whitespace-nowrap bg-chop px-6 py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-[#D1442E] disabled:opacity-50 sm:w-auto"
-          >
-             {loading ? 'Loading...' : 'Unlock full report — $9.9'}
-          </button>
-        </div>
-      )}
-
-      {/* 正常展示 */}
-      {(!needPay || unlocked) && !verifying && report && (
-        <>
-          {remainingFree !== null && !unlocked && (
-            <div className="mt-4 text-xs font-mono text-muted">
-              Free lookups remaining this week: {remainingFree}
+      {/* 🔥 给核心内容包裹 id，打印时只显示这一块 */}
+      <div id={`report-print-area-${company.credit_code}`} className="print:p-8 print:bg-white">
+        <div className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between print:border-gray-300">
+          <div>
+            <h2 className="font-serif text-lg font-medium text-paper sm:text-xl print:text-black print:text-2xl">{company.name}</h2>
+            <div className="mt-1.5 font-mono text-xs text-muted print:text-gray-600">
+              Unified credit code: <span className="text-foreground print:text-black">{company.credit_code}</span>
             </div>
-          )}
-
-          <div className="mt-5 flex flex-col gap-4 border border-line bg-panel p-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className={`border px-2.5 py-1 text-xs font-semibold ${riskTone}`}>
-                {report.risk_level_en}
-              </span>
-              <span className="text-xs text-muted">{report.risk_level_cn}</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-jade">Highlights</div>
-                <ul className="mt-2 space-y-1 text-sm text-foreground">
-                  {(report.highlights_en || []).map((h, i) => (
-                    <li key={i}>· {h}</li>
-                  ))}
-                </ul>
-                <div className="mt-1.5 text-xs text-muted">
-                  {(report.highlights_cn || []).join(' · ')}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-chop">Risk points</div>
-                <ul className="mt-2 space-y-1 text-sm text-foreground">
-                  {(report.risk_points_en || []).map((r, i) => (
-                    <li key={i}>· {r}</li>
-                  ))}
-                </ul>
-                <div className="mt-1.5 text-xs text-muted">
-                  {(report.risk_points_cn || []).join(' · ')}
-                </div>
-              </div>
+            <div className="mt-1.5 font-mono text-xs text-muted print:text-gray-600">
+              EST. {company.establish_date} · STATUS:{' '}
+              <span className={statusStyle(company.status)}>{company.status}</span>
             </div>
           </div>
+        </div>
 
-          <div className="mt-4 border border-line bg-panel2 p-5">
-            <div className="text-[11px] uppercase tracking-wide text-muted">
-              Comprehensive evaluation
-            </div>
-            <p className="mt-3 text-sm leading-relaxed text-foreground">{report.evaluation_en}</p>
-            <p className="mt-3 border-t border-line pt-3 text-[13px] leading-relaxed text-muted">
-              {report.evaluation_cn}
+        {errorMsg && (
+          <div className="mt-4 border border-chop-dim bg-chop/10 p-3 text-xs text-chop print:hidden">
+            {errorMsg}
+          </div>
+        )}
+
+        {verifying && (
+          <div className="mt-8 flex flex-col items-center justify-center py-12 border border-line bg-panel/50 print:hidden">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-chop mb-4"></div>
+            <p className="text-sm text-foreground font-medium animate-pulse">
+              Verifying your payment...
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              This may take a minute (especially for WeChat Pay). Please wait and do not close this page.
             </p>
           </div>
+        )}
 
-          <div className="mt-4 divide-y divide-line border border-line">
-            {BASIC_FIELDS.map(renderRow)}
-            {CAPITAL_FIELDS.map(renderRow)}
-            {COMPLIANCE_FIELDS.map(renderRow)}
+        {needPay && !unlocked && !verifying && (
+          <div className="mt-5 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-8 sm:py-10 print:hidden">
+            <p className="text-sm leading-relaxed text-foreground">
+              You have used all 3 free lookups this week. Pay to unlock the full report.
+            </p>
+            <button
+              onClick={onUnlock}
+              disabled={loading}
+              className="w-full whitespace-nowrap bg-chop px-6 py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-[#D1442E] disabled:opacity-50 sm:w-auto"
+            >
+               {loading ? 'Loading...' : 'Unlock full report — $9.9'}
+            </button>
           </div>
+        )}
 
-          {!unlocked ? (
-            <div className="mt-4 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
-              <p className="max-w-sm text-[13px] leading-relaxed text-muted">
-                <strong className="font-semibold text-foreground">Full report — $9.9.</strong> Unlocks
-                shareholders, enforcement detail, address classification, and a bilingual AI risk
-                narrative.
+        {(!needPay || unlocked) && !verifying && report && (
+          <>
+            {remainingFree !== null && !unlocked && (
+              <div className="mt-4 text-xs font-mono text-muted print:hidden">
+                Free lookups remaining this week: {remainingFree}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-col gap-4 border border-line bg-panel p-5 print:border-gray-300 print:bg-white">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`border px-2.5 py-1 text-xs font-semibold ${riskTone} print:border-gray-500 print:text-black`}>
+                  {report.risk_level_en}
+                </span>
+                <span className="text-xs text-muted print:text-gray-600">{report.risk_level_cn}</span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-jade print:text-black print:font-bold">Highlights</div>
+                  <ul className="mt-2 space-y-1 text-sm text-foreground print:text-black">
+                    {(report.highlights_en || []).map((h, i) => (
+                      <li key={i}>· {h}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-1.5 text-xs text-muted print:text-gray-600">
+                    {(report.highlights_cn || []).join(' · ')}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-chop print:text-black print:font-bold">Risk points</div>
+                  <ul className="mt-2 space-y-1 text-sm text-foreground print:text-black">
+                    {(report.risk_points_en || []).map((r, i) => (
+                      <li key={i}>· {r}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-1.5 text-xs text-muted print:text-gray-600">
+                    {(report.risk_points_cn || []).join(' · ')}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 border border-line bg-panel2 p-5 print:border-gray-300 print:bg-white">
+              <div className="text-[11px] uppercase tracking-wide text-muted print:text-black print:font-bold">
+                Comprehensive evaluation
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-foreground print:text-black">{report.evaluation_en}</p>
+              <p className="mt-3 border-t border-line pt-3 text-[13px] leading-relaxed text-muted print:border-gray-300 print:text-gray-600">
+                {report.evaluation_cn}
               </p>
-              <button
-                onClick={onUnlock}
-                disabled={loading}
-                className="w-full whitespace-nowrap bg-chop px-6 py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-[#D1442E] disabled:opacity-50 sm:w-auto"
-              >
-                {loading ? 'Loading...' : 'Unlock full report — $9.9'}
-              </button>
             </div>
-          ) : (
-            <div className="mt-4 flex flex-col items-start gap-4 border border-jade-dim bg-jade/[0.08] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-[13px] text-jade">Report unlocked · saved to your query history</p>
-              <button className="w-full whitespace-nowrap border border-jade px-5 py-3 text-sm font-semibold text-jade transition-colors hover:bg-jade/[0.12] sm:w-auto">
-                Export as PDF
-              </button>
+
+            <div className="mt-4 divide-y divide-line border border-line print:divide-gray-300 print:border-gray-300">
+              {BASIC_FIELDS.map(renderRow)}
+              {CAPITAL_FIELDS.map(renderRow)}
+              {COMPLIANCE_FIELDS.map(renderRow)}
             </div>
-          )}
-        </>
+          </>
+        )}
+      </div>
+
+      {/* 底部状态栏（不要包在打印区域里） */}
+      {!needPay && !verifying && report && (
+        !unlocked ? (
+          <div className="mt-4 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-6 sm:flex-row sm:items-center sm:justify-between print:hidden">
+            <p className="max-w-sm text-[13px] leading-relaxed text-muted">
+              <strong className="font-semibold text-foreground">Full report — $9.9.</strong> Unlocks
+              shareholders, enforcement detail, address classification, and a bilingual AI risk
+              narrative.
+            </p>
+            <button
+              onClick={onUnlock}
+              disabled={loading}
+              className="w-full whitespace-nowrap bg-chop px-6 py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-[#D1442E] disabled:opacity-50 sm:w-auto"
+            >
+              {loading ? 'Loading...' : 'Unlock full report — $9.9'}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col items-start gap-4 border border-jade-dim bg-jade/[0.08] px-6 py-5 sm:flex-row sm:items-center sm:justify-between print:hidden">
+            <p className="text-[13px] text-jade">Report unlocked · saved to your query history</p>
+            <button 
+              onClick={handleExportPDF}
+              className="w-full whitespace-nowrap border border-jade px-5 py-3 text-sm font-semibold text-jade transition-colors hover:bg-jade/[0.12] sm:w-auto"
+            >
+              Export as PDF
+            </button>
+          </div>
+        )
       )}
     </section>
   );
