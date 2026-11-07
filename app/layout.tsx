@@ -1,3 +1,4 @@
+import { GoogleAnalytics } from '@next/third-parties/google'
 import type { Metadata } from 'next';
 import { Fraunces, IBM_Plex_Sans } from 'next/font/google';
 import localFont from 'next/font/local';
@@ -40,7 +41,11 @@ export default function RootLayout({
       lang="en"
       className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}
     >
-      <body className="bg-ink font-sans text-foreground">{children}</body>
+      <body className="bg-ink font-sans text-foreground">
+        {children}
+      </body>
+      {/* 👇 加入 Google Analytics 组件，并填入你的衡量 ID */}
+      <GoogleAnalytics gaId="G-EGXLC5YMJ9" />
     </html>
   );
 }
