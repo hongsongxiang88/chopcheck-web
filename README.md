@@ -193,11 +193,11 @@ README.md：项目说明文档。
 tailwind.config.ts：Tailwind CSS 的配置文件。你的自定义颜色（如 chop, ink, paper）应该就是在这里定义的。
 ```
 ## 调用付费汇总
-一、Deepseek Token 
+一、Deepseek Token  -- 费用1
 https://platform.deepseek.com/usage
-二、阿里云函数FC
+二、阿里云函数FC -- 费用2
 https://fcnext.console.aliyun.com/cn-hangzhou/functions
-三、阿里云云市场服务+百度智能云
+三、阿里云云市场服务+百度智能云  --费用3/4
 https://market.aliyun.com/products/56928005?scene=market
 https://console.bce.baidu.com/ai-engine/ocr/overview/index
-四、域名是在wordpress注册的 duediligences.org
+四、域名是在wordpress注册的 duediligences.org --费用5

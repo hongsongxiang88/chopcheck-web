@@ -35,7 +35,7 @@ export default function Home() {
     setUserId(uid);
   }, []);
 
-  // 🔥 新增：全局支付轮询监听器
+  // 全局支付轮询监听器
   useEffect(() => {
     if (pendingIndex === null && verifyingIndex === null) return;
     if (!userId) return;
@@ -89,6 +89,7 @@ export default function Home() {
     setSelectedIndex(null);
     setUnlockedIndex(null);
     setVerifyingIndex(null);
+    setPendingIndex(null); // 清理历史状态
 
     try {
       const res = await fetch('/api/search-company', {
@@ -113,6 +114,7 @@ export default function Home() {
 
   function selectCompany(index: number) {
     setSelectedIndex((prev) => (prev === index ? null : index));
+    // 切换公司时，如果不是这家公司解锁了，重置掉解锁状态
     if (unlockedIndex !== index) {
       setUnlockedIndex(null);
     }
@@ -126,12 +128,13 @@ export default function Home() {
     setPendingIndex(index);
   }
 
-  function handlePaymentInitiated() {
+  // 当 Paddle 支付完成时触发
+  function handlePaymentSuccess() {
     if (pendingIndex === null) return;
     const unlockedCompany = result?.companies[pendingIndex];
     
     setVerifyingIndex(pendingIndex);
-    setPendingIndex(null);
+    setPendingIndex(null); // 关闭弹窗
     showToast('Payment successful! Verifying...');
     
     setTimeout(() => {
@@ -150,9 +153,10 @@ export default function Home() {
     showToast('Report unlocked successfully!');
   }
 
+  // 当 Paddle 被取消或关闭时触发
   function handlePaymentCancel() {
     setPendingIndex(null);
-    setVerifyingIndex(null);
+    setVerifyingIndex(null); 
   }
 
   const pendingCompanyId = pendingIndex !== null && result?.companies[pendingIndex] 
@@ -267,7 +271,7 @@ export default function Home() {
       <UnlockModal
         open={pendingIndex !== null}
         onClose={handlePaymentCancel}
-        onConfirm={handlePaymentInitiated}
+        onConfirm={handlePaymentSuccess}
         userId={userId}
         companyId={pendingCompanyId}
       />

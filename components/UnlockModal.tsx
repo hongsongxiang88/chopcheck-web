@@ -23,8 +23,6 @@ export default function UnlockModal({ open, onClose, onConfirm, userId, companyI
       eventCallback: (event) => {
         if (event.name === 'checkout.completed') {
           setPaying(false);
-          
-          // 🔥 广播支付成功消息，解决微信扫码后不跳转/不刷新的问题
           try {
             const bc = new BroadcastChannel('paddle_checkout');
             bc.postMessage({ type: 'PAYMENT_SUCCESS', companyId });
@@ -32,16 +30,16 @@ export default function UnlockModal({ open, onClose, onConfirm, userId, companyI
           } catch (e) {
             console.error('BroadcastChannel error:', e);
           }
-
-          onConfirm();
+          onConfirm(); // 支付成功，通知父组件
         } else if (event.name === 'checkout.closed') {
           setPaying(false);
+          onClose(); // 🔥 核心修复：如果是用户手动关闭/取消，明确调用取消逻辑
         }
       },
     }).then((p) => {
       if (p) setPaddle(p);
     });
-  }, [onConfirm, companyId]);
+  }, [onConfirm, onClose, companyId]);
 
   if (!open) return null;
 
@@ -86,7 +84,7 @@ export default function UnlockModal({ open, onClose, onConfirm, userId, companyI
 
         <div className="mt-5 flex gap-2.5">
           <button
-            onClick={onClose}
+            onClick={onClose} // 点击取消按钮，触发父级的 handlePaymentCancel
             disabled={paying}
             className="flex-1 border border-line py-3 text-sm font-semibold text-muted transition-colors hover:text-foreground disabled:opacity-50"
           >
