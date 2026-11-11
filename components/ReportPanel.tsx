@@ -153,7 +153,6 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
   }, [verifying, userId, company.credit_code, onVerifiedSuccess]);
 
   const handleExportPDF = () => {
-    // 🔥 安全校验：如果没解锁，连打印功能都不给触发
     if (!unlocked) {
       alert('Please unlock the report before exporting.');
       return;
@@ -204,7 +203,6 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
           {loading && !report ? (
             <span className="text-muted animate-pulse">Loading…</span>
           ) : masked ? (
-            // 🔥 核心修复：没解锁直接显示一把锁，不渲染真实数据！
             <span className="text-chop font-semibold text-xs border border-chop/30 bg-chop/10 px-2 py-0.5 rounded">
               🔒 Unlock to view
             </span>
@@ -249,6 +247,20 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
           </div>
         )}
 
+        {/* 🔥 核心修改点：给详情页的加载状态增加大号的视觉反馈 */}
+        {loading && !report && !verifying && (
+          <div className="mt-6 flex flex-col items-center justify-center py-16 border border-line bg-panel/30 rounded-sm">
+            <div className="relative flex h-12 w-12 items-center justify-center mb-4">
+              <div className="absolute h-full w-full animate-ping rounded-full bg-jade/20"></div>
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-jade"></div>
+            </div>
+            <h3 className="text-base font-medium text-paper">Generating Deep Report...</h3>
+            <p className="mt-2 text-xs text-muted text-center max-w-xs leading-relaxed animate-pulse">
+              We are analyzing registry data and compiling AI risk metrics. This takes about 30-60 seconds.
+            </p>
+          </div>
+        )}
+
         {verifying && (
           <div className="mt-8 flex flex-col items-center justify-center py-12 border border-line bg-panel/50">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-chop mb-4"></div>
@@ -285,6 +297,7 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
             )}
 
             <div className="mt-5 flex flex-col gap-4 border border-line bg-panel p-5">
+              {/* 内容区保持原样 */}
               <div className="flex flex-wrap items-center gap-3">
                 <span className={`border px-2.5 py-1 text-xs font-semibold ${riskTone}`}>
                   {report.risk_level_en}
@@ -338,6 +351,7 @@ export default function ReportPanel({ company, userId, unlocked, verifying, onUn
         )}
       </div>
 
+      {/* 底部操作栏保持不变 */}
       {!needPay && !verifying && report && (
         !unlocked ? (
           <div className="mt-4 flex flex-col items-start gap-4 border border-chop-dim bg-gradient-to-b from-chop/[0.08] to-chop/[0.02] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">

@@ -24,6 +24,9 @@ export default function Home() {
 
   const [userId, setUserId] = useState('');
 
+  // 🔥 新增：用于获取结果列表区域的 DOM 引用，方便自动滚动
+  const resultsRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     let uid = localStorage.getItem('chopcheck_uid');
     if (!uid) {
@@ -35,7 +38,17 @@ export default function Home() {
     setUserId(uid);
   }, []);
 
-  // 全局支付轮询监听器
+  // 🔥 新增：当搜索结果出现时，自动平滑滚动到结果区域
+  useEffect(() => {
+    if (result && resultsRef.current) {
+      // 延迟 100ms 确保 DOM 已经渲染完毕
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [result]);
+
+  // ... 中间关于支付和搜索的逻辑保持不变 ...
   useEffect(() => {
     if (pendingIndex === null && verifyingIndex === null) return;
     if (!userId) return;
@@ -57,13 +70,9 @@ export default function Home() {
         
         if (data.isPaidView === true) {
           clearInterval(interval);
-          
           if (pendingIndex !== null) setPendingIndex(null);
-          
           const targetIndex = pendingIndex !== null ? pendingIndex : verifyingIndex;
-          if (targetIndex !== null) {
-            handleVerifiedSuccess(targetIndex);
-          }
+          if (targetIndex !== null) handleVerifiedSuccess(targetIndex);
         }
       } catch (err) {
         console.error('Polling error', err);
@@ -89,7 +98,12 @@ export default function Home() {
     setSelectedIndex(null);
     setUnlockedIndex(null);
     setVerifyingIndex(null);
-    setPendingIndex(null); // 清理历史状态
+    setPendingIndex(null);
+
+    // 🔥 新增：开始搜索时，自动滚动到结果加载区域，让用户看到下面的 Loading 动画
+    setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
 
     try {
       const res = await fetch('/api/search-company', {
@@ -112,12 +126,10 @@ export default function Home() {
     }
   }
 
+  // ... selectCompany, requestUnlock 等逻辑保持不变 ...
   function selectCompany(index: number) {
     setSelectedIndex((prev) => (prev === index ? null : index));
-    // 切换公司时，如果不是这家公司解锁了，重置掉解锁状态
-    if (unlockedIndex !== index) {
-      setUnlockedIndex(null);
-    }
+    if (unlockedIndex !== index) setUnlockedIndex(null);
   }
 
   function requestUnlock(index: number) {
@@ -128,21 +140,16 @@ export default function Home() {
     setPendingIndex(index);
   }
 
-  // 当 Paddle 支付完成时触发
   function handlePaymentSuccess() {
     if (pendingIndex === null) return;
     const unlockedCompany = result?.companies[pendingIndex];
-    
     setVerifyingIndex(pendingIndex);
-    setPendingIndex(null); // 关闭弹窗
+    setPendingIndex(null); 
     showToast('Payment successful! Verifying...');
-    
     setTimeout(() => {
       if (unlockedCompany) {
         const el = document.getElementById(`company-row-${unlockedCompany.credit_code}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 100);
   }
@@ -153,7 +160,6 @@ export default function Home() {
     showToast('Report unlocked successfully!');
   }
 
-  // 当 Paddle 被取消或关闭时触发
   function handlePaymentCancel() {
     setPendingIndex(null);
     setVerifyingIndex(null); 
@@ -165,6 +171,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col">
+      {/* header 保持不变 */}
       <header className="border-b border-line print:hidden">
         <div className="mx-auto flex max-w-3xl items-baseline justify-between px-6 py-5 sm:px-7">
           <div>
@@ -184,6 +191,7 @@ export default function Home() {
       </header>
 
       <div className="mx-auto w-full max-w-3xl flex-1 px-6 sm:px-7">
+        {/* 搜索区保持不变 */}
         <section className="pb-8 pt-12 sm:pt-16 print:hidden">
           <h1 className="max-w-lg font-serif text-[28px] font-medium leading-tight text-paper sm:text-4xl">
             Search a company name. See what&apos;s behind the chop.
@@ -217,29 +225,40 @@ export default function Home() {
           )}
         </section>
 
-        {loading && (
-          <div className="mt-9 flex flex-col items-center justify-center border-t border-line pt-10 pb-4 print:hidden">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-chop"></div>
-            <p className="mt-4 text-sm text-muted animate-pulse">Searching global registry... this may take a few seconds.</p>
-          </div>
-        )}
+        {/* 🔥 修改点：给结果区域加上 ref，并重写 Loading 状态 */}
+        <div ref={resultsRef}>
+          {loading && (
+            // 🔥 修改点：提供强烈的视觉反馈，告诉用户后台正在查数据
+            <div className="mt-4 flex flex-col items-center justify-center border-t border-line pt-12 pb-16 print:hidden">
+              <div className="relative flex h-16 w-16 items-center justify-center">
+                <div className="absolute h-full w-full animate-ping rounded-full bg-chop/20"></div>
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-line border-t-chop"></div>
+              </div>
+              <h3 className="mt-6 text-lg font-medium text-paper">Searching Registry...</h3>
+              <p className="mt-2 text-sm text-muted animate-pulse text-center max-w-sm">
+                We are cross-checking public databases. This usually takes 30-60 seconds. Please do not close this page.
+              </p>
+            </div>
+          )}
 
-        {!loading && result && (
-          <CompanyList
-            companies={result.companies}
-            translatedKeyword={result.translated_keyword}
-            originalKeyword={result.original_keyword}
-            selectedIndex={selectedIndex}
-            onSelect={selectCompany}
-            unlockedIndex={unlockedIndex}
-            verifyingIndex={verifyingIndex}
-            onUnlock={requestUnlock}
-            onVerifiedSuccess={handleVerifiedSuccess}
-            userId={userId}
-          />
-        )}
+          {!loading && result && (
+            <CompanyList
+              companies={result.companies}
+              translatedKeyword={result.translated_keyword}
+              originalKeyword={result.original_keyword}
+              selectedIndex={selectedIndex}
+              onSelect={selectCompany}
+              unlockedIndex={unlockedIndex}
+              verifyingIndex={verifyingIndex}
+              onUnlock={requestUnlock}
+              onVerifiedSuccess={handleVerifiedSuccess}
+              userId={userId}
+            />
+          )}
+        </div>
       </div>
 
+      {/* footer 和 弹窗保持不变 */}
       <footer className="mt-20 border-t border-line bg-ink py-10 text-xs text-muted print:hidden">
         <div className="mx-auto max-w-3xl px-6 sm:px-7">
           <div className="flex flex-col justify-between gap-8 sm:flex-row">
