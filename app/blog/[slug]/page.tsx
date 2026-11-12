@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { posts } from '@/lib/posts';
+// 🔥 引入我们刚才做的底部搜索组件
+import BlogSearchCTA from '@/components/BlogSearchCTA';
 
 export function generateStaticParams() {
   return posts.map((p) => ({ slug: p.slug }));
@@ -62,6 +64,9 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
         className="mt-8 space-y-5 text-sm leading-relaxed text-foreground [&_h2]:mt-8 [&_h2]:font-serif [&_h2]:text-lg [&_h2]:text-paper [&_p]:text-muted [&_strong]:text-foreground"
         dangerouslySetInnerHTML={{ __html: post.content }}
       />
+
+      {/* 🔥 核心修改：在文章内容下方插入搜索 CTA 组件 */}
+      <BlogSearchCTA />
     </main>
   );
 }

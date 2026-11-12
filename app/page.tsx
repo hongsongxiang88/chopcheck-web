@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import SearchBar from '@/components/SearchBar';
 import CompanyList from '@/components/CompanyList';
 import UnlockModal from '@/components/UnlockModal';
@@ -8,7 +9,10 @@ import Toast from '@/components/Toast';
 import type { SearchResponse } from '@/lib/types';
 import Link from 'next/link';
 
-export default function Home() {
+// 🔥 将原本的主页逻辑抽离成内部组件，为了配合 useSearchParams 使用
+function HomeContent() {
+  const searchParams = useSearchParams();
+  
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,10 +27,9 @@ export default function Home() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [userId, setUserId] = useState('');
-
-  // 🔥 新增：用于获取结果列表区域的 DOM 引用，方便自动滚动
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  // 初始化用户 ID
   useEffect(() => {
     let uid = localStorage.getItem('chopcheck_uid');
     if (!uid) {
@@ -38,17 +41,30 @@ export default function Home() {
     setUserId(uid);
   }, []);
 
-  // 🔥 新增：当搜索结果出现时，自动平滑滚动到结果区域
+  // 🔥 新增：监听 URL 参数，实现从博客页跳转后自动搜索
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) {
+      setKeyword(q);
+      // 延迟执行，确保 DOM 已经挂载，滚动效果生效
+      setTimeout(() => {
+        performSearch(q);
+        // 搜索完成后，使用 history API 清理 URL 上的 ?q= 参数，保持首页干净
+        window.history.replaceState(null, '', '/');
+      }, 100);
+    }
+  }, [searchParams]);
+
+  // 结果出现时自动平滑滚动
   useEffect(() => {
     if (result && resultsRef.current) {
-      // 延迟 100ms 确保 DOM 已经渲染完毕
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     }
   }, [result]);
 
-  // ... 中间关于支付和搜索的逻辑保持不变 ...
+  // 支付轮询监听
   useEffect(() => {
     if (pendingIndex === null && verifyingIndex === null) return;
     if (!userId) return;
@@ -88,9 +104,9 @@ export default function Home() {
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   }
 
-  async function runSearch() {
-    const q = keyword.trim();
-    if (!q || loading) return;
+  // 🔥 改造：将搜索逻辑提取成一个接收参数的函数，方便复用
+  async function performSearch(searchKeyword: string) {
+    if (!searchKeyword || loading) return;
 
     setLoading(true);
     setError(null);
@@ -100,7 +116,6 @@ export default function Home() {
     setVerifyingIndex(null);
     setPendingIndex(null);
 
-    // 🔥 新增：开始搜索时，自动滚动到结果加载区域，让用户看到下面的 Loading 动画
     setTimeout(() => {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
@@ -109,7 +124,7 @@ export default function Home() {
       const res = await fetch('/api/search-company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_keyword: q }),
+        body: JSON.stringify({ company_keyword: searchKeyword }),
       });
       const data = await res.json();
 
@@ -126,7 +141,11 @@ export default function Home() {
     }
   }
 
-  // ... selectCompany, requestUnlock 等逻辑保持不变 ...
+  // 表单提交触发搜索
+  function runSearch() {
+    performSearch(keyword.trim());
+  }
+
   function selectCompany(index: number) {
     setSelectedIndex((prev) => (prev === index ? null : index));
     if (unlockedIndex !== index) setUnlockedIndex(null);
@@ -171,7 +190,6 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col">
-      {/* header 保持不变 */}
       <header className="border-b border-line print:hidden">
         <div className="mx-auto flex max-w-3xl items-baseline justify-between px-6 py-5 sm:px-7">
           <div>
@@ -191,7 +209,6 @@ export default function Home() {
       </header>
 
       <div className="mx-auto w-full max-w-3xl flex-1 px-6 sm:px-7">
-        {/* 搜索区保持不变 */}
         <section className="pb-8 pt-12 sm:pt-16 print:hidden">
           <h1 className="max-w-lg font-serif text-[28px] font-medium leading-tight text-paper sm:text-4xl">
             Search a company name. See what&apos;s behind the chop.
@@ -225,10 +242,8 @@ export default function Home() {
           )}
         </section>
 
-        {/* 🔥 修改点：给结果区域加上 ref，并重写 Loading 状态 */}
         <div ref={resultsRef}>
           {loading && (
-            // 🔥 修改点：提供强烈的视觉反馈，告诉用户后台正在查数据
             <div className="mt-4 flex flex-col items-center justify-center border-t border-line pt-12 pb-16 print:hidden">
               <div className="relative flex h-16 w-16 items-center justify-center">
                 <div className="absolute h-full w-full animate-ping rounded-full bg-chop/20"></div>
@@ -258,7 +273,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* footer 和 弹窗保持不变 */}
       <footer className="mt-20 border-t border-line bg-ink py-10 text-xs text-muted print:hidden">
         <div className="mx-auto max-w-3xl px-6 sm:px-7">
           <div className="flex flex-col justify-between gap-8 sm:flex-row">
@@ -297,5 +311,14 @@ export default function Home() {
       
       <Toast message={toast} />
     </main>
+  );
+}
+
+// 🔥 最外层导出：用 Suspense 包裹，防止 useSearchParams 引发的构建报错
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-ink"></div>}>
+      <HomeContent />
+    </Suspense>
   );
 }
